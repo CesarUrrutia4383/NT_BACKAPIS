@@ -1,6 +1,6 @@
-import { pool } from '../config/db.js';
+const { pool }= require ('../config/db.js');
 
-export const getAllProducts = async (req, res) => {
+const getAllProducts = async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM productos');
     res.json(rows);
@@ -9,7 +9,7 @@ export const getAllProducts = async (req, res) => {
   }
 };
 
-export const addProduct = async (req, res) => {
+const addProduct = async (req, res) => {
   const { id, nombre, marca, proposito, imagen_base64 } = req.body;
   try {
     const [result] = await pool.query(
@@ -21,3 +21,4 @@ export const addProduct = async (req, res) => {
     res.status(500).json({ message: 'Error adding product', error });
   }
 };
+module.exports = { getAllProducts, addProduct };
