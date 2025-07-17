@@ -1,4 +1,4 @@
-const { pool }= require ('../config/db.js');
+const { pool, adminPool }= require ('../config/db.js');
 const axios = require('axios');
 
 const getAllProducts = async (req, res) => {
