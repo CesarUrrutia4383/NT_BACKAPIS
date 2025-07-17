@@ -4,9 +4,16 @@ dotenv.config();
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
+  user: process.env.DB_USER_INV,
+  password: process.env.DB_PASSWORD_INV,
   database: process.env.DB_NAME,
   port: process.env.DB_PORT,
 });
-module.exports = { pool };
+const adminPool = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER_ADMIN,
+  password: process.env.DB_PASSWORD_ADMIN,
+  database: process.env.DB_NAME,
+  port: process.env.DB_PORT,
+});
+module.exports = { pool, adminPool };

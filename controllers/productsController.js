@@ -1,4 +1,5 @@
 const { pool }= require ('../config/db.js');
+const axios = require('axios');
 
 const getAllProducts = async (req, res) => {
   try {
@@ -10,11 +11,11 @@ const getAllProducts = async (req, res) => {
 };
 
 const addProduct = async (req, res) => {
-  const { id, nombre, marca, proposito, imagen_base64 } = req.body;
+  const { id, nombre, marca, proposito, cantidad } = req.body;
   try {
     const [result] = await pool.query(
-      'INSERT INTO productos (id, nombre, marca, proposito, imagen_base64) VALUES (?, ?, ?, ?, ?)',
-      [id, nombre, marca, proposito, imagen_base64]
+      'INSERT INTO productos (id, nombre, marca, proposito, cantidad) VALUES (?, ?, ?, ?,?)',
+      [id, nombre, marca, proposito, cantidad]
     );
     res.status(201).json({ id: result.insertId });
   } catch (error) {
