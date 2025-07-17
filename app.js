@@ -17,7 +17,7 @@ app.use('/routes/productos', productRoutes);
 
 // Ruta raíz para comprobar que el servidor funciona
 app.get('/', (req, res) => {
-  res.send('Bienvenido a la API de productos de NeumaticsTools');
+  res.send('ERROR 404 - MODULE NOT FOUND');
 });
 
 app.listen(PORT, () => {
