@@ -1,7 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const productRoutes = require('./routes/products'); 
+const productRoutes = require('./routes/products');
+const cartRoutes = require('./routes/cart');
+const quoteRoutes = require('./routes/quote');
 const dotenv = require('dotenv');
 
 dotenv.config();
@@ -14,6 +16,8 @@ app.use(bodyParser.json({ limit: '10mb' }));
 
 // Rutas de productos
 app.use('/routes/productos', productRoutes);
+app.use('/controllers/cartController', cartRoutes);
+app.use('/controllers/quoteController', quoteRoutes);
 
 // Ruta raíz para comprobar que el servidor funciona
 app.get('/', (req, res) => {
