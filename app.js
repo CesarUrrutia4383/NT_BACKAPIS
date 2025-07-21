@@ -17,7 +17,7 @@ app.use(bodyParser.json({ limit: '10mb' }));
 // Rutas de productos
 app.use('/routes/productos', productRoutes);
 app.use('/controllers/cartController', cartRoutes);
-app.use('/controllers/quoteController', quoteRoutes);
+app.use('/api/quote', quoteRoutes);
 
 // Ruta raíz para comprobar que el servidor funciona
 app.get('/', (req, res) => {
