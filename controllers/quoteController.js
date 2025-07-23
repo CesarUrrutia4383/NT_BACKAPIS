@@ -7,12 +7,12 @@ let cotizaciones = [];
 const sendQuote = async (req, res) => {
   const { carrito, nombre, telefono } = req.body;
   // Fijar destinatario para pruebas
-  const correoDestino = process.env.TO_MAIL_USER;
+  //const correoDestino = process.env.TO_MAIL_USER;
   if (!carrito || !nombre || !telefono) {
     return res.status(400).json({ message: 'Datos incompletos' });
   }
   // Guardar cotización en memoria
-  const cotizacion = { carrito, nombre, telefono, fecha: new Date() };
+  const cotizacion = { carrito, nombre, telefono, fecha: new Date(), destinoCorreo: req.body.destinoCorreo };
   cotizaciones.push(cotizacion);
 
   // Generar PDF en memoria
@@ -25,7 +25,13 @@ const sendQuote = async (req, res) => {
       return res.end(pdfBuffer);
     }
     // Enviar correo normalmente
-    await enviarCorreo({ to: correoDestino, subject: 'Neumaticos Tool || Nueva cotización Entrante', text: 'Cotizacion Entrante de: ' + nombre + ' - ' + telefono, pdfBuffer });
+    if (Array.isArray(req.body.destinoCorreo)) {
+      for (const correo of req.body.destinoCorreo) {
+        await enviarCorreo({ to: correo, subject: `Neumaticos Tool || Cotización de ${req.body.servicio} Entrante`, text: 'Cotizacion Entrante de: ' + nombre + ' - ' + telefono, pdfBuffer });
+      }
+    } else {
+      await enviarCorreo({ to: correoDestino, subject: `Neumaticos Tool || Cotización de ${req.body.servicio} Entrante`, text: 'Cotizacion Entrante de: ' + nombre + ' - ' + telefono, pdfBuffer });
+    }
     res.json({ message: 'Cotización enviada correctamente' });
   } catch (err) {
     res.status(500).json({ message: 'Error enviando correo', error: err });
