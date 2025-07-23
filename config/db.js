@@ -9,11 +9,4 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME,
   port: process.env.DB_PORT,
 });
-const adminPool = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER_ADMIN,
-  password: process.env.DB_PASSWORD_ADMIN,
-  database: process.env.DB_NAME,
-  port: process.env.DB_PORT,
-});
-module.exports = { pool, adminPool };
+module.exports = { pool };
