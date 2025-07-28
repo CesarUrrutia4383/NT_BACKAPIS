@@ -5,7 +5,7 @@ const PDFDocument = require('pdfkit');
 let cotizaciones = [];
 
 const sendQuote = async (req, res) => {
-  const { carrito, nombre, telefono } = req.body;
+  const { carrito, nombre, telefono, servicio, descripcion } = req.body;
   // Fijar destinatario para pruebas
   //const correoDestino = process.env.TO_MAIL_USER;
   if (!carrito || !nombre || !telefono) {
@@ -17,7 +17,7 @@ const sendQuote = async (req, res) => {
 
   // Generar PDF en memoria
   try {
-    const pdfBuffer = await generarPDFCotizacionBuffer({ carrito, nombreCliente: nombre, telefonoCliente: telefono });
+    const pdfBuffer = await generarPDFCotizacionBuffer({ carrito, nombreCliente: nombre, telefonoCliente: telefono, servicio, descripcion });
     // Si la petición incluye ?descargar=1, solo devolver el PDF
     if (req.query.descargar === '1') {
       res.setHeader('Content-Type', 'application/pdf');
@@ -27,7 +27,7 @@ const sendQuote = async (req, res) => {
     // Enviar correo normalmente
     if (Array.isArray(req.body.destinoCorreo)) {
       for (const correo of req.body.destinoCorreo) {
-        await enviarCorreo({ to: correo, subject: `Neumaticos Tool || Cotización de ${req.body.servicio} Entrante`, text: 'Cotizacion Entrante de: ' + nombre + ' - ' + telefono, pdfBuffer });
+        await enviarCorreo({ to: correo, subject: `NeumaticsTool || Cotización de ${req.body.servicio} Entrante`, text: 'Cotizacion Entrante de: ' + nombre + ' - ' + telefono, pdfBuffer });
       }
     } else {
       await enviarCorreo({ to: correoDestino, subject: `Neumaticos Tool || Cotización de ${req.body.servicio} Entrante`, text: 'Cotizacion Entrante de: ' + nombre + ' - ' + telefono, pdfBuffer });
@@ -38,7 +38,7 @@ const sendQuote = async (req, res) => {
   }
 };
 
-function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente }) {
+function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, servicio, descripcion }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40 });
     const buffers = [];
@@ -67,7 +67,7 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente })
     const colWidths = [180, 100, 120, 80]; // Producto, Marca, Propósito, Cantidad
     const totalWidth = colWidths.reduce((a, b) => a + b);
     const startX = doc.x;
-    let y = doc.y;
+    var y = doc.y; // Cambiado de let a var para evitar redeclaración
     // Encabezados
     doc.lineWidth(1.2);
     doc.rect(startX, y, totalWidth, 24).stroke();
@@ -85,7 +85,29 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente })
       doc.text(item.proposito, startX + colWidths[0] + colWidths[1] + 5, y + 6, { width: colWidths[2] - 10 });
       doc.text(item.cantidad.toString(), startX + colWidths[0] + colWidths[1] + colWidths[2] + 5, y + 6, { width: colWidths[3] - 10, align: 'center' });
       y += 20;
+      // Mostrar info debajo del nombre del producto si existe
+      if (item.info) {
+        doc.fontSize(9).fillColor('gray').text(item.info, startX + 10, y - 2, { width: colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] - 20 });
+        doc.fontSize(11).fillColor('black');
+        y += 14;
+      }
     });
+    let y = doc.y;
+    // Tabla de descripción de servicio
+    if (servicio === 'servicio' && descripcion) {
+      doc.moveDown(1);
+      const anchoTabla = 420;
+      const altoTitulo = 22;
+      const altoDesc = 60;
+      const startX = doc.x;
+      const startY = y + 10;
+      doc.lineWidth(1.5);
+      doc.rect(startX, startY, anchoTabla, altoTitulo + altoDesc).stroke();
+      doc.font('Helvetica-Bold').fontSize(12).text('Descripción del servicio solicitado:', startX + 10, startY + 7, { width: anchoTabla - 20 });
+      doc.font('Helvetica').fontSize(11).text(descripcion, startX + 10, startY + altoTitulo + 4, { width: anchoTabla - 20, height: altoDesc - 10 });
+      y = startY + altoTitulo + altoDesc;
+      doc.moveDown(4);
+    }
     // Total
     doc.moveTo(startX, y).lineTo(startX + totalWidth, y).stroke();
     doc.font('Helvetica-Bold').text(`Total de productos: ${carrito.reduce((sum, item) => sum + (item.cantidad || 0), 0)}`, startX, y + 10);
