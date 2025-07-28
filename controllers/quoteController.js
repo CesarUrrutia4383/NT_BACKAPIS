@@ -47,6 +47,7 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
       const pdfData = Buffer.concat(buffers);
       resolve(pdfData);
     });
+    
     // Cabecera
     doc.fontSize(18).font('Helvetica-Bold').text('Neumatics Tool');
     doc.moveDown(0.2);
@@ -60,15 +61,18 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
     doc.text(`Cliente: ${nombreCliente}`);
     doc.text(`Teléfono: ${telefonoCliente}`);
     doc.moveDown(1.5);
+    
     // Tabla de productos
     doc.fontSize(12).font('Helvetica-Bold').text('Productos:', { underline: true });
     doc.moveDown(0.5);
-    // Tabla
+    
+    // Tabla de productos
     const colWidths = [180, 100, 120, 80]; // Producto, Marca, Propósito, Cantidad
     const totalWidth = colWidths.reduce((a, b) => a + b);
     const startX = doc.x;
-    var y = doc.y; // Cambiado de let a var para evitar redeclaración
-    // Encabezados
+    let y = doc.y;
+    
+    // Encabezados de la tabla
     doc.lineWidth(1.2);
     doc.rect(startX, y, totalWidth, 24).stroke();
     doc.text('Producto', startX + 5, y + 7, { width: colWidths[0] - 10 });
@@ -77,7 +81,8 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
     doc.text('Cantidad', startX + colWidths[0] + colWidths[1] + colWidths[2] + 5, y + 7, { width: colWidths[3] - 10 });
     doc.font('Helvetica');
     y += 24;
-    // Filas
+    
+    // Filas de productos
     carrito.forEach((item) => {
       doc.rect(startX, y, totalWidth, 20).stroke();
       doc.text(item.nombre, startX + 5, y + 6, { width: colWidths[0] - 10 });
@@ -85,6 +90,7 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
       doc.text(item.proposito, startX + colWidths[0] + colWidths[1] + 5, y + 6, { width: colWidths[2] - 10 });
       doc.text(item.cantidad.toString(), startX + colWidths[0] + colWidths[1] + colWidths[2] + 5, y + 6, { width: colWidths[3] - 10, align: 'center' });
       y += 20;
+      
       // Mostrar info debajo del nombre del producto si existe
       if (item.info) {
         doc.fontSize(9).fillColor('gray').text(item.info, startX + 10, y - 2, { width: colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] - 20 });
@@ -92,26 +98,40 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
         y += 14;
       }
     });
-    y = doc.y;
-    // Tabla de descripción de servicio
+    
+    // Línea final de la tabla de productos
+    doc.moveTo(startX, y).lineTo(startX + totalWidth, y).stroke();
+    y += 10;
+    
+    // Tabla de descripción de servicio (solo si existe descripción)
     if (descripcion && descripcion.trim() !== '') {
       doc.moveDown(1);
+      
       const anchoTabla = 420;
       const altoTitulo = 22;
       const altoDesc = 60;
-      const startX = doc.x;
-      const startY = y + 10;
+      const startXDesc = doc.x;
+      const startYDesc = doc.y;
+      
+      // Dibujar el borde de la tabla de descripción
       doc.lineWidth(1.5);
-      doc.rect(startX, startY, anchoTabla, altoTitulo + altoDesc).stroke();
-      doc.font('Helvetica-Bold').fontSize(12).text('Descripción del servicio solicitado:', startX + 10, startY + 7, { width: anchoTabla - 20 });
-      doc.font('Helvetica').fontSize(11).text(descripcion, startX + 10, startY + altoTitulo + 4, { width: anchoTabla - 20, height: altoDesc - 10 });
-      y = startY + altoTitulo + altoDesc;
-      doc.moveDown(4);
+      doc.rect(startXDesc, startYDesc, anchoTabla, altoTitulo + altoDesc).stroke();
+      
+      // Título de la descripción
+      doc.font('Helvetica-Bold').fontSize(12).text('Descripción del servicio solicitado:', startXDesc + 10, startYDesc + 7, { width: anchoTabla - 20 });
+      
+      // Contenido de la descripción
+      doc.font('Helvetica').fontSize(11).text(descripcion, startXDesc + 10, startYDesc + altoTitulo + 4, { width: anchoTabla - 20, height: altoDesc - 10 });
+      
+      // Actualizar la posición Y para el total
+      y = startYDesc + altoTitulo + altoDesc + 20;
     }
-    // Total
+    
+    // Total de productos
     doc.moveTo(startX, y).lineTo(startX + totalWidth, y).stroke();
     doc.font('Helvetica-Bold').text(`Total de productos: ${carrito.reduce((sum, item) => sum + (item.cantidad || 0), 0)}`, startX, y + 10);
     doc.font('Helvetica').fillColor('gray').text('Gracias por su preferencia. La empresa se pondrá en contacto con usted.', startX, y + 35);
+    
     doc.end();
   });
 }
