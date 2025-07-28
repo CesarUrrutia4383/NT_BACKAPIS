@@ -107,10 +107,10 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
     if (descripcion && descripcion.trim() !== '') {
       doc.moveDown(1);
       
-      const anchoTabla = 420;
+      const anchoTabla = totalWidth; // Usar el mismo ancho que la tabla de productos
       const altoTitulo = 25;
       const altoDesc = 80;
-      const startXDesc = doc.x;
+      const startXDesc = startX; // Usar la misma posición X que la tabla de productos
       const startYDesc = doc.y;
       
       // Dibujar el borde de la tabla de descripción
