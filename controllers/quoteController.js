@@ -92,7 +92,7 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
         y += 14;
       }
     });
-    let y = doc.y;
+    y = doc.y;
     // Tabla de descripción de servicio
     if (servicio === 'servicio' && descripcion) {
       doc.moveDown(1);
