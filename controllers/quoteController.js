@@ -101,30 +101,39 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
     
     // Línea final de la tabla de productos
     doc.moveTo(startX, y).lineTo(startX + totalWidth, y).stroke();
-    y += 10;
+    y += 20;
     
     // Tabla de descripción de servicio (solo si existe descripción)
     if (descripcion && descripcion.trim() !== '') {
       doc.moveDown(1);
       
       const anchoTabla = 420;
-      const altoTitulo = 22;
-      const altoDesc = 60;
+      const altoTitulo = 25;
+      const altoDesc = 80;
       const startXDesc = doc.x;
       const startYDesc = doc.y;
       
       // Dibujar el borde de la tabla de descripción
-      doc.lineWidth(1.5);
+      doc.lineWidth(2);
       doc.rect(startXDesc, startYDesc, anchoTabla, altoTitulo + altoDesc).stroke();
       
-      // Título de la descripción
-      doc.font('Helvetica-Bold').fontSize(12).text('Descripción del servicio solicitado:', startXDesc + 10, startYDesc + 7, { width: anchoTabla - 20 });
+      // Título de la descripción - destacado y centrado
+      doc.fillColor('#FF8F1C').font('Helvetica-Bold').fontSize(14);
+      doc.text('Descripción del Servicio Solicitado', startXDesc + 10, startYDesc + 8, { 
+        width: anchoTabla - 20,
+        align: 'center'
+      });
       
       // Contenido de la descripción
-      doc.font('Helvetica').fontSize(11).text(descripcion, startXDesc + 10, startYDesc + altoTitulo + 4, { width: anchoTabla - 20, height: altoDesc - 10 });
+      doc.fillColor('black').font('Helvetica').fontSize(11);
+      doc.text(descripcion, startXDesc + 15, startYDesc + altoTitulo + 10, { 
+        width: anchoTabla - 30, 
+        height: altoDesc - 20,
+        align: 'justify'
+      });
       
       // Actualizar la posición Y para el total
-      y = startYDesc + altoTitulo + altoDesc + 20;
+      y = startYDesc + altoTitulo + altoDesc + 30;
     }
     
     // Total de productos
