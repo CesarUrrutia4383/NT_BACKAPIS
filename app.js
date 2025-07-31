@@ -12,11 +12,6 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(cors({
-  origin: [process.env.VITE_API_FRONT_URL, 
-    'http://localhost:5174', process.env.VITE_API_URL],
-  methods: ['GET', 'POST']
-}));
 app.use(bodyParser.json({ limit: '10mb' }));
 
 // Rutas de productos
