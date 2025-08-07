@@ -49,9 +49,9 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
     });
     
     // Cabecera
-    doc.fontSize(18).font('Helvetica-Bold').text('Neumatics Tool');
+    doc.fontSize(20).font('Helvetica-Bold').text('Neumatics Tool');
     doc.moveDown(0.2);
-    doc.fontSize(10).font('Helvetica').text('Dirección: Calle Ejemplo 123, Ciudad');
+    doc.fontSize(10).font('Helvetica').text('Dirección: Blvd. Luis Donaldo Colosio #1007, 34217, Durango, México');
     doc.text('Tel: 555-123-4567 | contacto@neumaticstool.com');
     doc.moveDown(0.5);
     doc.fontSize(14).fillColor('#FF8F1C').font('Helvetica-Bold').text('COTIZACIÓN');
@@ -78,7 +78,7 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
     doc.text('Producto', startX + 5, y + 7, { width: colWidths[0] - 10 });
     doc.text('Marca', startX + colWidths[0] + 5, y + 7, { width: colWidths[1] - 10 });
     doc.text('Propósito', startX + colWidths[0] + colWidths[1] + 5, y + 7, { width: colWidths[2] - 10 });
-    doc.text('Cantidad', startX + colWidths[0] + colWidths[1] + colWidths[2] + 5, y + 7, { width: colWidths[3] - 10 });
+    doc.text('Cantidad', startX + colWidths[0] + colWidths[1] + colWidths[2] + 5, y + 7, { width: colWidths[3] - 10, align: 'center' });
     doc.font('Helvetica');
     y += 24;
     
@@ -90,13 +90,6 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
       doc.text(item.proposito, startX + colWidths[0] + colWidths[1] + 5, y + 6, { width: colWidths[2] - 10 });
       doc.text(item.cantidad.toString(), startX + colWidths[0] + colWidths[1] + colWidths[2] + 5, y + 6, { width: colWidths[3] - 10, align: 'center' });
       y += 20;
-      
-      // Mostrar info debajo del nombre del producto si existe
-      if (item.info) {
-        doc.fontSize(9).fillColor('gray').text(item.info, startX + 10, y - 2, { width: colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] - 20 });
-        doc.fontSize(11).fillColor('black');
-        y += 14;
-      }
     });
     
     // Línea final de la tabla de productos
@@ -163,4 +156,4 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
   });
 }
 
-module.exports = { sendQuote }; 
+module.exports = { sendQuote };
