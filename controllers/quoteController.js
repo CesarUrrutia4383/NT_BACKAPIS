@@ -47,7 +47,7 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
       const pdfData = Buffer.concat(buffers);
       resolve(pdfData);
     });
-    
+
     // Cabecera
     doc.fontSize(20).font('Helvetica-Bold').text('Neumatics Tool');
     doc.moveDown(0.2);
@@ -61,79 +61,126 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
     doc.text(`Cliente: ${nombreCliente}`);
     doc.text(`Teléfono: ${telefonoCliente}`);
     doc.moveDown(1.5);
-    
-    // Tabla de productos
+
+    // Tabla de productos dinámica
     doc.fontSize(12).font('Helvetica-Bold').text('Productos:', { underline: true });
     doc.moveDown(0.5);
-    
-    // Tabla de productos
-    const colWidths = [180, 100, 120, 80]; // Producto, Marca, Propósito, Cantidad
-    const totalWidth = colWidths.reduce((a, b) => a + b);
+
+    // Determinar columnas dinámicamente
+    const allKeys = carrito.reduce((keys, item) => {
+      Object.keys(item).forEach(k => {
+        if (!keys.includes(k)) keys.push(k);
+      });
+      return keys;
+    }, []);
+    const columns = allKeys;
+    const colCount = columns.length;
+    const totalWidth = 480;
+    const colWidth = totalWidth / colCount;
     const startX = doc.x;
     let y = doc.y;
-    
-    // Encabezados de la tabla
+
+    // Encabezados
     doc.lineWidth(1.2);
     doc.rect(startX, y, totalWidth, 24).stroke();
-    doc.text('Producto', startX + 5, y + 7, { width: colWidths[0] - 10 });
-    doc.text('Marca', startX + colWidths[0] + 5, y + 7, { width: colWidths[1] - 10 });
-    doc.text('Propósito', startX + colWidths[0] + colWidths[1] + 5, y + 7, { width: colWidths[2] - 10 });
-    doc.text('Cantidad', startX + colWidths[0] + colWidths[1] + colWidths[2] + 5, y + 7, { width: colWidths[3] - 10, align: 'center' });
+    columns.forEach((col, i) => {
+      doc.text(col.charAt(0).toUpperCase() + col.slice(1), startX + i * colWidth + 5, y + 7, { width: colWidth - 10, align: 'center' });
+      // Línea vertical entre columnas del encabezado
+      if (i < columns.length - 1) {
+        doc.moveTo(startX + (i + 1) * colWidth, y).lineTo(startX + (i + 1) * colWidth, y + 24).stroke();
+      }
+    });
     doc.font('Helvetica');
     y += 24;
-    
+
     // Filas de productos
     carrito.forEach((item) => {
-      doc.rect(startX, y, totalWidth, 20).stroke();
-      doc.text(item.nombre, startX + 5, y + 6, { width: colWidths[0] - 10 });
-      doc.text(item.marca, startX + colWidths[0] + 5, y + 6, { width: colWidths[1] - 10 });
-      doc.text(item.proposito, startX + colWidths[0] + colWidths[1] + 5, y + 6, { width: colWidths[2] - 10 });
-      doc.text(item.cantidad.toString(), startX + colWidths[0] + colWidths[1] + colWidths[2] + 5, y + 6, { width: colWidths[3] - 10, align: 'center' });
-      y += 20;
+      let maxHeight = 20;
+      const cellHeights = columns.map((col) => {
+        const text = item[col] !== undefined ? String(item[col]) : '';
+        return doc.heightOfString(text, { width: colWidth - 10, align: 'center' });
+      });
+      maxHeight = Math.max(...cellHeights, 20);
+
+      // Dibuja el rectángulo de la fila
+      doc.rect(startX, y, totalWidth, maxHeight).stroke();
+
+      // Dibuja cada celda en su área correspondiente
+      columns.forEach((col, i) => {
+        const text = item[col] !== undefined ? String(item[col]) : '';
+        doc.text(text, startX + i * colWidth + 5, y + 6, {
+          width: colWidth - 10,
+          align: 'center',
+          height: maxHeight - 12
+        });
+        // Línea vertical entre columnas de la fila
+        if (i < columns.length - 1) {
+          doc.moveTo(startX + (i + 1) * colWidth, y).lineTo(startX + (i + 1) * colWidth, y + maxHeight).stroke();
+        }
+      });
+
+      y += maxHeight + 2;
     });
-    
+
     // Línea final de la tabla de productos
     doc.moveTo(startX, y).lineTo(startX + totalWidth, y).stroke();
     y += 20;
-    
+
+    // Sincroniza la posición vertical antes de la descripción
+    doc.y = y;
+
     // Tabla de descripción de servicio (solo si existe descripción)
     if (descripcion && descripcion.trim() !== '') {
       doc.moveDown(1);
-      
-      const anchoTabla = totalWidth; // Usar el mismo ancho que la tabla de productos
+
+      const anchoTabla = totalWidth;
       const altoTitulo = 25;
-      const altoDesc = 80;
-      const startXDesc = startX; // Usar la misma posición X que la tabla de productos
+      const startXDesc = startX;
       const startYDesc = doc.y;
-      
-      // Dibujar el borde de la tabla de descripción
+
       doc.lineWidth(2);
-      doc.rect(startXDesc, startYDesc, anchoTabla, altoTitulo + altoDesc).stroke();
-      
-      // Título de la descripción - destacado y centrado
+      // Rectángulo del título
+      doc.rect(startXDesc, startYDesc, anchoTabla, altoTitulo).stroke();
+
       doc.fillColor('#FF8F1C').font('Helvetica-Bold').fontSize(14);
-      doc.text('Descripción del Servicio Solicitado', startXDesc + 10, startYDesc + 8, { 
+      doc.text('Descripción del Servicio Solicitado', startXDesc + 10, startYDesc + 8, {
         width: anchoTabla - 20,
         align: 'center'
       });
-      
-      // Contenido de la descripción
+
+      // Posición para el texto de la descripción
+      const descY = startYDesc + altoTitulo + 10;
+      doc.y = descY; // Mueve el cursor a la posición correcta
       doc.fillColor('black').font('Helvetica').fontSize(11);
-      doc.text(descripcion, startXDesc + 15, startYDesc + altoTitulo + 10, { 
-        width: anchoTabla - 30, 
-        height: altoDesc - 20,
+
+      // Opciones para el texto
+      const descOptions = {
+        width: anchoTabla - 30,
         align: 'justify'
-      });
-      
-      // Actualizar la posición Y para el total
-      y = startYDesc + altoTitulo + altoDesc + 30;
+      };
+
+      // Guarda la posición inicial antes de escribir el texto
+      const descTextStartY = doc.y;
+      doc.text(descripcion, startXDesc + 15, doc.y, descOptions);
+      // Calcula el alto real del texto
+      const descTextEndY = doc.y;
+      const descHeight = descTextEndY - descTextStartY + 20;
+
+      // Dibuja el rectángulo alrededor del texto de la descripción
+      doc.rect(startXDesc, descTextStartY - 10, anchoTabla, descHeight).stroke();
+
+      // Actualiza la posición vertical para el siguiente contenido
+      doc.y = descTextStartY - 10 + descHeight + 10;
     }
-    
+
+    // Usa doc.y para el resto del contenido
+    y = doc.y;
+
     // Total de productos
     doc.moveTo(startX, y).lineTo(startX + totalWidth, y).stroke();
     doc.font('Helvetica-Bold').text(`Total de productos: ${carrito.reduce((sum, item) => sum + (item.cantidad || 0), 0)}`, startX, y + 10);
     doc.font('Helvetica').fillColor('gray').text('Gracias por su preferencia. La empresa se pondrá en contacto con usted.', startX, y + 35);
-    
+
     doc.end();
   });
 }
