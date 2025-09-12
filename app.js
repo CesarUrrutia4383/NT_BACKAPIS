@@ -25,10 +25,5 @@ app.use('/routes/productos', productRoutes);
 app.use('/routes/cart', cartRoutes);
 app.use('/routes/quote', quoteRoutes);
 
-// Ruta raíz para comprobar que el servidor funciona
-app.get('/', (req, res) => {
-  res.send('ERROR 404 - MODULE NOT FOUND');
-});
-
 app.listen(PORT, () => {
 });

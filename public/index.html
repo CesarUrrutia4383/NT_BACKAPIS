@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backend Protegido</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 50px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <script>
+        // Prevenir menú contextual (clic derecho)
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+
+        // Prevenir teclas de inspección
+        document.addEventListener('keydown', function(e) {
+            // F12
+            if (e.keyCode === 123) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+Shift+I
+            if (e.ctrlKey && e.shiftKey && e.keyCode === 73) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+U (ver fuente)
+            if (e.ctrlKey && e.keyCode === 85) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+Shift+C (inspeccionar elemento)
+            if (e.ctrlKey && e.shiftKey && e.keyCode === 67) {
+                e.preventDefault();
+                return false;
+            }
+            // Ctrl+Shift+J (consola)
+            if (e.ctrlKey && e.shiftKey && e.keyCode === 74) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        // Prevenir selección de texto
+        document.addEventListener('selectstart', function(e) {
+            e.preventDefault();
+        });
+
+        // Prevenir copiar
+        document.addEventListener('copy', function(e) {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>
