@@ -6,7 +6,10 @@ let cotizaciones = [];
 
 const sendQuote = async (req, res) => {
   const { carrito, nombre, telefono, servicio, descripcion } = req.body;
+  console.log('Iniciando sendQuote con datos:', { carrito: carrito ? carrito.length : 0, nombre, telefono, servicio });
+
   if (!carrito || !nombre || !telefono) {
+    console.log('Datos incompletos en sendQuote');
     return res.status(400).json({ message: 'Datos incompletos' });
   }
 
@@ -21,7 +24,8 @@ const sendQuote = async (req, res) => {
   };
 
   // Obtener correos del servicio, o default si no coincide
-  const correosServicio = correosPorServicio[servicio] || ['contacto@neumaticstool.com'];
+  const correosServicio = correosPorServicio[servicio] || ['cesar_urrutia_dev4383@proton.me'];
+  console.log('Correos de servicio:', correosServicio);
 
   // Combinar con correos adicionales del body si existen
   let correosDestino = [...correosServicio];
@@ -32,6 +36,7 @@ const sendQuote = async (req, res) => {
       correosDestino.push(req.body.destinoCorreo);
     }
   }
+  console.log('Correos destino finales:', correosDestino);
 
   // Guardar cotización en memoria
   const cotizacion = { carrito, nombre, telefono, fecha: new Date(), servicio, correosDestino };
@@ -39,20 +44,35 @@ const sendQuote = async (req, res) => {
 
   // Generar PDF en memoria
   try {
+    console.log('Generando PDF...');
     const pdfBuffer = await generarPDFCotizacionBuffer({ carrito, nombreCliente: nombre, telefonoCliente: telefono, servicio, descripcion });
+    console.log('PDF generado exitosamente, tamaño:', pdfBuffer.length);
+
     // Si la petición incluye ?descargar=1, solo devolver el PDF
     if (req.query.descargar === '1') {
+      console.log('Descargando PDF en lugar de enviar correo');
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'inline; filename="NT_Cotizacion.pdf"+"nombre"');
       return res.end(pdfBuffer);
     }
+
     // Enviar correo a todos los correos destino
+    console.log('Iniciando envío de correos...');
     for (const correo of correosDestino) {
-      await enviarCorreo({ to: correo, subject: `Neumatics Tool || Cotización de ${servicio || 'Servicio'} Entrante`, text: 'Cotizacion Entrante de: ' + nombre + ' - ' + telefono, pdfBuffer });
+      console.log(`Enviando correo a: ${correo}`);
+      try {
+        await enviarCorreo({ to: correo, subject: `Neumatics Tool || Cotización de ${servicio || 'Servicio'} Entrante`, text: 'Cotizacion Entrante de: ' + nombre + ' - ' + telefono, pdfBuffer });
+        console.log(`Correo enviado exitosamente a: ${correo}`);
+      } catch (emailErr) {
+        console.error(`Error enviando correo a ${correo}:`, emailErr);
+        // Continuar con el siguiente correo en lugar de fallar todo
+      }
     }
+    console.log('Envío de correos completado');
     res.json({ message: 'Cotización enviada correctamente' });
   } catch (err) {
-    res.status(500).json({ message: 'Error enviando correo', error: err });
+    console.error('Error general en sendQuote:', err);
+    res.status(500).json({ message: 'Error enviando correo', error: err.message });
   }
 };
 
@@ -204,6 +224,7 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
 }
 
 async function enviarCorreo({ to, subject, text, pdfBuffer }) {
+  console.log(`Configurando transporte SMTP para enviar a: ${to}`);
   // Configura tu transporte SMTP real aquí
   let transporter = nodemailer.createTransport({
     service: 'gmail',
@@ -212,6 +233,17 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
       pass: process.env.MAIL_PASS
     }
   });
+
+  // Verificar conexión del transporter
+  try {
+    await transporter.verify();
+    console.log('Transporter verificado correctamente');
+  } catch (verifyErr) {
+    console.error('Error verificando transporter:', verifyErr);
+    throw verifyErr;
+  }
+
+  console.log(`Enviando correo a ${to} con asunto: ${subject}`);
   await transporter.sendMail({
     from: process.env.MAIL_USER,
     to,
@@ -219,6 +251,7 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
     text,
     attachments: [{ filename: 'Cotizacion.pdf', content: pdfBuffer }]
   });
+  console.log(`Correo enviado a ${to}`);
 }
 
 module.exports = { sendQuote };
