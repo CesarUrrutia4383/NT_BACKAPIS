@@ -6,13 +6,35 @@ let cotizaciones = [];
 
 const sendQuote = async (req, res) => {
   const { carrito, nombre, telefono, servicio, descripcion } = req.body;
-  // Fijar destinatario para pruebas
-  //const correoDestino = process.env.TO_MAIL_USER;
   if (!carrito || !nombre || !telefono) {
     return res.status(400).json({ message: 'Datos incompletos' });
   }
+
+  // Definir correos por servicio para que la cotizacion sea enviada segun corresponda
+  const correosPorServicio = {
+    'venta': ['cesar_urrutia_dev4383@proton.me'],
+    'mantenimiento': ['cesar_urrutia_dev4383@proton.me','cesar_urrutia_dev4383@proton.me'],
+    'renta': ['cesar_urrutia_dev4383@proton.me']
+    /*'venta': ['arturo.lopez@neumaticstool.com'],
+    'mantenimiento': ['ventasnt@neumaticstool.com','serviciosnt@neumaticstool.com'],
+    'renta': ['divisionmineria@neumaticstool.com']*/
+  };
+
+  // Obtener correos del servicio, o default si no coincide
+  const correosServicio = correosPorServicio[servicio] || ['contacto@neumaticstool.com'];
+
+  // Combinar con correos adicionales del body si existen
+  let correosDestino = [...correosServicio];
+  if (req.body.destinoCorreo) {
+    if (Array.isArray(req.body.destinoCorreo)) {
+      correosDestino = [...correosDestino, ...req.body.destinoCorreo];
+    } else {
+      correosDestino.push(req.body.destinoCorreo);
+    }
+  }
+
   // Guardar cotización en memoria
-  const cotizacion = { carrito, nombre, telefono, fecha: new Date(), destinoCorreo: req.body.destinoCorreo };
+  const cotizacion = { carrito, nombre, telefono, fecha: new Date(), servicio, correosDestino };
   cotizaciones.push(cotizacion);
 
   // Generar PDF en memoria
@@ -24,13 +46,9 @@ const sendQuote = async (req, res) => {
       res.setHeader('Content-Disposition', 'inline; filename="NT_Cotizacion.pdf"+"nombre"');
       return res.end(pdfBuffer);
     }
-    // Enviar correo normalmente
-    if (Array.isArray(req.body.destinoCorreo)) {
-      for (const correo of req.body.destinoCorreo) {
-        await enviarCorreo({ to: correo, subject: `NeumaticsTool || Cotización de ${req.body.servicio} Entrante`, text: 'Cotizacion Entrante de: ' + nombre + ' - ' + telefono, pdfBuffer });
-      }
-    } else {
-      await enviarCorreo({ to: correoDestino, subject: `Neumaticos Tool || Cotización de ${req.body.servicio} Entrante`, text: 'Cotizacion Entrante de: ' + nombre + ' - ' + telefono, pdfBuffer });
+    // Enviar correo a todos los correos destino
+    for (const correo of correosDestino) {
+      await enviarCorreo({ to: correo, subject: `Neumatics Tool || Cotización de ${servicio || 'Servicio'} Entrante`, text: 'Cotizacion Entrante de: ' + nombre + ' - ' + telefono, pdfBuffer });
     }
     res.json({ message: 'Cotización enviada correctamente' });
   } catch (err) {
@@ -52,7 +70,7 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
     doc.fontSize(20).font('Helvetica-Bold').text('Neumatics Tool');
     doc.moveDown(0.2);
     doc.fontSize(10).font('Helvetica').text('Dirección: Blvd. Luis Donaldo Colosio #1007, 34217, Durango, México');
-    doc.text('Tel: 555-123-4567 | contacto@neumaticstool.com');
+    doc.text('Tel: 618 818 21 82  | contacto@neumaticstool.com');
     doc.moveDown(0.5);
     doc.fontSize(14).fillColor('#FF8F1C').font('Helvetica-Bold').text('COTIZACIÓN');
     doc.fillColor('black').fontSize(11).font('Helvetica');
