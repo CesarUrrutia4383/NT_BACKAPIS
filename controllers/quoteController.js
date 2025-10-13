@@ -227,16 +227,17 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
   console.log(`Configurando transporte SMTP para enviar a: ${to}`);
   // Configura tu transporte SMTP real aquí
   let transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // true for 465, false for other ports
+    service: 'gmail',
     auth: {
-      user: process.env.MAIL_USER,
-      pass: process.env.MAIL_PASS
+      user: 'silverurrutia2@gmail.com',
+      pass: 'ahul zlvc ayfh godh'
     },
     tls: {
       rejectUnauthorized: false
-    }
+    },
+    connectionTimeout: 60000, // 60 seconds
+    greetingTimeout: 30000, // 30 seconds
+    socketTimeout: 60000 // 60 seconds
   });
 
   // Verificar conexión del transporter
