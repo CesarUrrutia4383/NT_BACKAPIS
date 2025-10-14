@@ -248,104 +248,72 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
 }
 
 async function enviarCorreo({ to, subject, text, pdfBuffer }) {
-  console.log(`Configurando transporte SMTP para enviar a: ${to}`);
+  console.log(`Preparando envío de correo a: ${to}`);
   
+  // Crear un único transporter para reutilizar
+  const transporter = nodemailer.createTransport({
+    service: process.env.MAIL_SERVICE,
+    port: process.env.MAIL_PORT || 465,
+    secure: process.env.MAIL_SECURE === 'true',
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS
+    },
+    tls: {
+      rejectUnauthorized: false
+    }
+  });
+
   const maxRetries = 3;
   let lastError = null;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Intento ${attempt} de ${maxRetries} para enviar correo a: ${to}`);
-  let transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
-    auth: {
-      user: process.env.MAIL_USER,
-      pass: process.env.MAIL_PASS
-    },
-    debug: true,
-    logger: true,
-    maxConnections: 1,
-    pool: false,
-    tls: {
-      rejectUnauthorized: false,
-      minVersion: 'TLSv1.2'
-    },
-    connectionTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
-    proxy: process.env.HTTP_PROXY || null // Soporte para proxy si está configurado
-  });
 
-  // Verificar conexión del transporter con timeout
-  try {
-    console.log('Verificando conexión SMTP...');
-    const verifyPromise = transporter.verify();
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Timeout verificando conexión')), 20000)
-    );
-    
-    await Promise.race([verifyPromise, timeoutPromise]);
-    console.log('Conexión SMTP verificada correctamente');
-  } catch (verifyErr) {
-    console.error('Error verificando conexión SMTP:', {
-      error: verifyErr.message,
-      code: verifyErr.code,
-      command: verifyErr.command,
-      response: verifyErr.response,
-      stack: verifyErr.stack
-    });
-    
-    // Información de diagnóstico adicional
-    try {
-      const dns = require('dns').promises;
-      const result = await dns.resolve('smtp.gmail.com');
-      console.log('DNS Resolution:', result);
-    } catch (dnsErr) {
-      console.error('DNS Resolution failed:', dnsErr);
-    }
-    
-    throw new Error(`Error de conexión SMTP: ${verifyErr.message}`);
-  }
-
-  console.log(`Enviando correo a ${to} con asunto: ${subject}`);
-  try {
-    const info = await transporter.sendMail({
-    from: process.env.MAIL_USER,
-    to,
-    subject,
-    text,
-    attachments: [{ filename: 'Cotizacion.pdf', content: pdfBuffer }]
-  });
+      console.log(`Enviando correo a ${to} con asunto: ${subject}`);
+      
+      const info = await transporter.sendMail({
+        from: {
+          name: 'Neumatics Tool',
+          address: process.env.MAIL_USER
+        },
+        to,
+        subject,
+        text,
+        attachments: [{
+          filename: 'Cotizacion.pdf',
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        }]
+      });
       console.log(`Correo enviado exitosamente a ${to} en el intento ${attempt}`);
       return info;
     } catch (error) {
-      console.error(`Error en intento ${attempt}:`, {
-        error: error.message,
-        code: error.code,
-        command: error.command,
-        response: error.response
-      });
       lastError = error;
+      console.error(`Error en intento ${attempt}/${maxRetries}:`, {
+        message: error.message,
+        code: error.code,
+        response: error.response?.body || error.response
+      });
       
+      // Si no es el último intento, esperar antes del siguiente
       if (attempt < maxRetries) {
-        console.log(`Esperando 5 segundos antes del siguiente intento...`);
-        await new Promise(resolve => setTimeout(resolve, 5000));
-      }
-    }
-    } catch (err) {
-      // Manejo de errores inesperados para que el try tenga su catch correspondiente
-      console.error(`Error inesperado en intento ${attempt}:`, err);
-      lastError = err;
-      if (attempt < maxRetries) {
-        console.log(`Esperando 5 segundos antes del siguiente intento por error inesperado...`);
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        const waitTime = attempt * 3000; // Incrementar tiempo de espera con cada intento
+        console.log(`Esperando ${waitTime/1000} segundos antes del siguiente intento...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
   }
   
-  throw new Error(`No se pudo enviar el correo después de ${maxRetries} intentos. Último error: ${lastError.message}`);
+  // Si llegamos aquí, es porque todos los intentos fallaron
+  console.error('Detalles del último error:', {
+    message: lastError.message,
+    code: lastError.code,
+    response: lastError.response?.body || lastError.response
+  });
+  
+  throw new Error(`Error al enviar el correo después de ${maxRetries} intentos: ${lastError.message}`);
 }
 
 module.exports = { sendQuote };
