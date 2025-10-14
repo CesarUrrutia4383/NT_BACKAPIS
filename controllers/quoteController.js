@@ -258,8 +258,8 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
       console.log(`Intento ${attempt} de ${maxRetries} para enviar correo a: ${to}`);
   let transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    port: 587,
+    secure: false,
     auth: {
       user: process.env.MAIL_USER,
       pass: process.env.MAIL_PASS
@@ -267,29 +267,45 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
     debug: true,
     logger: true,
     maxConnections: 1,
-    maxMessages: 3,
-    pool: true,
+    pool: false,
     tls: {
       rejectUnauthorized: false,
-      ciphers: 'SSLv3'
+      minVersion: 'TLSv1.2'
     },
-    connectionTimeout: 60000, // 1 minuto
+    connectionTimeout: 30000,
     greetingTimeout: 30000,
-    socketTimeout: 60000
+    socketTimeout: 30000,
+    proxy: process.env.HTTP_PROXY || null // Soporte para proxy si está configurado
   });
 
-  // Verificar conexión del transporter
+  // Verificar conexión del transporter con timeout
   try {
     console.log('Verificando conexión SMTP...');
-    await transporter.verify();
+    const verifyPromise = transporter.verify();
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Timeout verificando conexión')), 20000)
+    );
+    
+    await Promise.race([verifyPromise, timeoutPromise]);
     console.log('Conexión SMTP verificada correctamente');
   } catch (verifyErr) {
     console.error('Error verificando conexión SMTP:', {
       error: verifyErr.message,
       code: verifyErr.code,
       command: verifyErr.command,
-      response: verifyErr.response
+      response: verifyErr.response,
+      stack: verifyErr.stack
     });
+    
+    // Información de diagnóstico adicional
+    try {
+      const dns = require('dns').promises;
+      const result = await dns.resolve('smtp.gmail.com');
+      console.log('DNS Resolution:', result);
+    } catch (dnsErr) {
+      console.error('DNS Resolution failed:', dnsErr);
+    }
+    
     throw new Error(`Error de conexión SMTP: ${verifyErr.message}`);
   }
 
