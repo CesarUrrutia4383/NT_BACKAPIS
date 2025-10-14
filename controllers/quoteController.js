@@ -229,35 +229,54 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
   let transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: 'silverurrutia2@gmail.com',
-      pass: 'ahul zlvc ayfh godh'
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS
     },
+    debug: true, // Enable debug logs
+    logger: true, // Enable logger
     tls: {
       rejectUnauthorized: false
     },
-    connectionTimeout: 60000, // 60 seconds
+    connectionTimeout: 30000, // 30 seconds
     greetingTimeout: 30000, // 30 seconds
-    socketTimeout: 60000 // 60 seconds
+    socketTimeout: 30000 // 30 seconds
   });
 
   // Verificar conexión del transporter
   try {
+    console.log('Verificando conexión SMTP...');
     await transporter.verify();
-    console.log('Transporter verificado correctamente');
+    console.log('Conexión SMTP verificada correctamente');
   } catch (verifyErr) {
-    console.error('Error verificando transporter:', verifyErr);
-    throw verifyErr;
+    console.error('Error verificando conexión SMTP:', {
+      error: verifyErr.message,
+      code: verifyErr.code,
+      command: verifyErr.command,
+      response: verifyErr.response
+    });
+    throw new Error(`Error de conexión SMTP: ${verifyErr.message}`);
   }
 
   console.log(`Enviando correo a ${to} con asunto: ${subject}`);
-  await transporter.sendMail({
+  try {
+    const info = await transporter.sendMail({
     from: process.env.MAIL_USER,
     to,
     subject,
     text,
     attachments: [{ filename: 'Cotizacion.pdf', content: pdfBuffer }]
   });
-  console.log(`Correo enviado a ${to}`);
+    console.log(`Correo enviado exitosamente a ${to}`);
+    return info;
+  } catch (sendErr) {
+    console.error('Error enviando correo:', {
+      error: sendErr.message,
+      code: sendErr.code,
+      command: sendErr.command,
+      response: sendErr.response
+    });
+    throw new Error(`Error enviando correo: ${sendErr.message}`);
+  }
 }
 
 module.exports = { sendQuote };
