@@ -58,18 +58,42 @@ const sendQuote = async (req, res) => {
 
     // Enviar correo a todos los correos destino
     console.log('Iniciando envío de correos...');
+    let errores = [];
+    let exitos = [];
+
     for (const correo of correosDestino) {
       console.log(`Enviando correo a: ${correo}`);
       try {
-        await enviarCorreo({ to: correo, subject: `Neumatics Tool || Cotización de ${servicio || 'Servicio'} Entrante`, text: 'Cotizacion Entrante de: ' + nombre + ' - ' + telefono, pdfBuffer });
+        await enviarCorreo({
+          to: correo,
+          subject: `Neumatics Tool || Cotización de ${servicio || 'Servicio'} Entrante`,
+          text: `Cotización Entrante\n\nCliente: ${nombre}\nTeléfono: ${telefono}\nServicio: ${servicio}\n\nSe adjunta PDF con los detalles.`,
+          pdfBuffer
+        });
         console.log(`Correo enviado exitosamente a: ${correo}`);
+        exitos.push(correo);
       } catch (emailErr) {
         console.error(`Error enviando correo a ${correo}:`, emailErr);
-        // Continuar con el siguiente correo en lugar de fallar todo
+        errores.push({ correo, error: emailErr.message });
       }
     }
+
     console.log('Envío de correos completado');
-    res.json({ message: 'Cotización enviada correctamente' });
+    
+    if (errores.length > 0 && exitos.length === 0) {
+      return res.status(500).json({
+        message: 'Error al enviar todos los correos',
+        errores,
+        success: false
+      });
+    }
+
+    res.json({
+      message: exitos.length === correosDestino.length ? 'Cotización enviada correctamente' : 'Cotización enviada parcialmente',
+      success: true,
+      errores: errores.length > 0 ? errores : undefined,
+      exitosos: exitos
+    });
   } catch (err) {
     console.error('Error general en sendQuote:', err);
     res.status(500).json({ message: 'Error enviando correo', error: err.message });
@@ -225,21 +249,33 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
 
 async function enviarCorreo({ to, subject, text, pdfBuffer }) {
   console.log(`Configurando transporte SMTP para enviar a: ${to}`);
-  // Configura tu transporte SMTP real aquí
+  
+  const maxRetries = 3;
+  let lastError = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Intento ${attempt} de ${maxRetries} para enviar correo a: ${to}`);
   let transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
       user: process.env.MAIL_USER,
       pass: process.env.MAIL_PASS
     },
-    debug: true, // Enable debug logs
-    logger: true, // Enable logger
+    debug: true,
+    logger: true,
+    maxConnections: 1,
+    maxMessages: 3,
+    pool: true,
     tls: {
-      rejectUnauthorized: false
+      rejectUnauthorized: false,
+      ciphers: 'SSLv3'
     },
-    connectionTimeout: 30000, // 30 seconds
-    greetingTimeout: 30000, // 30 seconds
-    socketTimeout: 30000 // 30 seconds
+    connectionTimeout: 60000, // 1 minuto
+    greetingTimeout: 30000,
+    socketTimeout: 60000
   });
 
   // Verificar conexión del transporter
@@ -266,17 +302,34 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
     text,
     attachments: [{ filename: 'Cotizacion.pdf', content: pdfBuffer }]
   });
-    console.log(`Correo enviado exitosamente a ${to}`);
-    return info;
-  } catch (sendErr) {
-    console.error('Error enviando correo:', {
-      error: sendErr.message,
-      code: sendErr.code,
-      command: sendErr.command,
-      response: sendErr.response
-    });
-    throw new Error(`Error enviando correo: ${sendErr.message}`);
+      console.log(`Correo enviado exitosamente a ${to} en el intento ${attempt}`);
+      return info;
+    } catch (error) {
+      console.error(`Error en intento ${attempt}:`, {
+        error: error.message,
+        code: error.code,
+        command: error.command,
+        response: error.response
+      });
+      lastError = error;
+      
+      if (attempt < maxRetries) {
+        console.log(`Esperando 5 segundos antes del siguiente intento...`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+    }
+    } catch (err) {
+      // Manejo de errores inesperados para que el try tenga su catch correspondiente
+      console.error(`Error inesperado en intento ${attempt}:`, err);
+      lastError = err;
+      if (attempt < maxRetries) {
+        console.log(`Esperando 5 segundos antes del siguiente intento por error inesperado...`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+    }
   }
+  
+  throw new Error(`No se pudo enviar el correo después de ${maxRetries} intentos. Último error: ${lastError.message}`);
 }
 
 module.exports = { sendQuote };
