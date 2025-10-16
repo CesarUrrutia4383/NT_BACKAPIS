@@ -1,77 +1,42 @@
 const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
-const net = require('net');
-const dns = require('dns');
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 let cotizaciones = [];
 
-// Función para probar la conectividad SMTP
-async function testSMTPConnection() {
-    console.log('Iniciando pruebas de conectividad SMTP...');
+// Función para probar la conectividad de Resend
+async function testEmailConnectivity() {
+    console.log('Verificando conectividad del servicio de correo...');
     
-    // 1. Resolver DNS de Gmail
     try {
-        const addresses = await dns.promises.resolve('smtp.gmail.com');
-        console.log('Resolución DNS de smtp.gmail.com exitosa:', addresses);
+        // Intentar hacer una petición simple a Resend
+        const response = await fetch('https://api.resend.com/v1/emails', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
+            }
+        });
+
+        if (response.ok) {
+            console.log('Conectividad con servicio de correo verificada');
+            return true;
+        } else {
+            console.error('Error conectando con servicio de correo:', response.statusText);
+            return false;
+        }
     } catch (error) {
-        console.error('Error en resolución DNS:', error);
+        console.error('Error verificando conectividad:', error);
         return false;
     }
-
-    // 2. Probar múltiples puertos SMTP
-    return new Promise(async (resolve) => {
-        const ports = [587, 465, 25]; // Probar diferentes puertos en orden de preferencia
-        const timeout = 10000; // 10 segundos de timeout
-        
-        for (const port of ports) {
-            try {
-                const socket = new net.Socket();
-                
-                const result = await new Promise((portResolve) => {
-                    socket.setTimeout(timeout);
-                    
-                    socket.on('connect', () => {
-                        console.log(`Conexión TCP exitosa a smtp.gmail.com:${port}`);
-                        socket.end();
-                        portResolve(true);
-                    });
-                    
-                    socket.on('timeout', () => {
-                        console.log(`Timeout al intentar conectar a smtp.gmail.com:${port}`);
-                        socket.destroy();
-                        portResolve(false);
-                    });
-                    
-                    socket.on('error', (error) => {
-                        console.log(`Error de conexión TCP en puerto ${port}:`, error.code);
-                        socket.destroy();
-                        portResolve(false);
-                    });
-                    
-                    console.log(`Intentando conexión TCP a smtp.gmail.com:${port}...`);
-                    socket.connect(port, 'smtp.gmail.com');
-                });
-                
-                if (result) {
-                    console.log(`Puerto ${port} disponible para SMTP`);
-                    return resolve(true);
-                }
-            } catch (err) {
-                console.error(`Error probando puerto ${port}:`, err);
-            }
-        }
-        
-        console.error('No se pudo conectar a ningún puerto SMTP');
-        resolve(false);
-    });
 }
 
 const sendQuote = async (req, res) => {
   console.log('Iniciando pruebas de conectividad...');
   
-  // Ejecutar prueba de conectividad SMTP
-  const smtpConnectivity = await testSMTPConnection();
-  console.log('Resultado de prueba SMTP:', smtpConnectivity ? 'EXITOSA' : 'FALLIDA');
+  // Verificar conectividad del servicio de correo
+  const emailConnectivity = await testEmailConnectivity();
+  console.log('Resultado de prueba de conectividad:', emailConnectivity ? 'EXITOSA' : 'FALLIDA');
   
   // Mostrar información del ambiente
   console.log('Variables de entorno:', {
@@ -384,40 +349,64 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
 
 async function enviarCorreo({ to, subject, text, pdfBuffer }) {
   console.log(`Preparando envío de correo a: ${to}`);
-  console.log('Configuración de correo:', {
-    host: process.env.MAIL_SERVICE,
-    port: process.env.MAIL_PORT,
-    secure: process.env.MAIL_SECURE === 'true',
-    user: process.env.MAIL_USER?.substring(0, 5) + '...' // Solo mostrar parte del correo por seguridad
-  });
   
-  // Crear un único transporter para reutilizar
-  // Configurar el transporter con opciones más permisivas
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,  // Cambiamos a puerto 587 para TLS
-    secure: false, // false para TLS - como true para 465
-    requireTLS: true, // Forzar uso de TLS
-    auth: {
-      user: process.env.MAIL_USER,
-      pass: process.env.MAIL_PASS
-    },
-    tls: {
-      rejectUnauthorized: false,
-      minVersion: 'TLSv1.2',
-      ciphers: 'HIGH:MEDIUM:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA'
-    },
-    connectionTimeout: 60000,    // 60 segundos
-    greetingTimeout: 60000,     // 60 segundos
-    socketTimeout: 60000,        // 60 segundos
-    debug: true,
-    logger: true,
-    pool: true,                 // Usar pool de conexiones
-    maxConnections: 3,          // Máximo número de conexiones simultáneas
-    maxMessages: 10             // Máximo número de mensajes por conexión
-  });
-
+  const fecha = new Date().toLocaleDateString('es-MX');
   const maxRetries = 3;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Intento ${attempt} de ${maxRetries} para enviar correo a: ${to}`);
+      
+      // Usar Resend para enviar el correo
+      const { data, error } = await resend.emails.send({
+        from: 'Neumatics Tool <no-reply@neumaticstool.com>',
+        to: [to],
+        subject: subject,
+        text: text,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #FF8F1C;">Nueva Cotización - Neumatics Tool</h2>
+            <div style="border-left: 4px solid #FF8F1C; padding-left: 15px; margin: 20px 0;">
+              <p><strong>Cliente:</strong> ${text.split('\n')[2].replace('Cliente: ', '')}</p>
+              <p><strong>Teléfono:</strong> ${text.split('\n')[3].replace('Teléfono: ', '')}</p>
+              <p><strong>Servicio:</strong> ${text.split('\n')[4].replace('Servicio: ', '')}</p>
+              <p><strong>Fecha:</strong> ${fecha}</p>
+            </div>
+            <p>Se adjunta PDF con los detalles de la cotización.</p>
+            <br>
+            <p style="color: #666; font-size: 12px; margin-top: 30px;">
+              Este es un correo automático, por favor no responder.<br>
+              Neumatics Tool © ${new Date().getFullYear()}
+            </p>
+          </div>
+        `,
+        attachments: [{
+          filename: `NT_Cotizacion_${fecha.replace(/\//g, '-')}.pdf`,
+          content: pdfBuffer.toString('base64')
+        }]
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      console.log(`Correo enviado exitosamente a ${to} en el intento ${attempt}`);
+      return data;
+    } catch (error) {
+      console.error(`Error en intento ${attempt}/${maxRetries}:`, {
+        message: error.message
+      });
+      
+      if (attempt < maxRetries) {
+        const waitTime = Math.min(attempt * 5000, 15000);
+        console.log(`Esperando ${waitTime/1000} segundos antes del siguiente intento...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      } else {
+        throw new Error(`Error al enviar el correo después de ${maxRetries} intentos: ${error.message}`);
+      }
+    }
+  }
+
   let lastError = null;
   
   // Verificar la conexión SMTP antes de intentar enviar

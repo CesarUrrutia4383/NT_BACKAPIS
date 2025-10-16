@@ -33,7 +33,8 @@
     "jspdf-autotable": "^5.0.2",
     "mysql2": "^3.14.2",
     "nodemailer": "^6.10.1",
-    "pdfkit": "^0.13.0"
+    "pdfkit": "^0.13.0",
+    "resend": "^6.1.3"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",
