@@ -18,32 +18,51 @@ async function testSMTPConnection() {
         return false;
     }
 
-    // 2. Probar conexión TCP al puerto SMTP configurado
-    return new Promise((resolve) => {
-        const socket = new net.Socket();
-        const port = parseInt(process.env.MAIL_PORT || '465');
+    // 2. Probar múltiples puertos SMTP
+    return new Promise(async (resolve) => {
+        const ports = [587, 465, 25]; // Probar diferentes puertos en orden de preferencia
+        const timeout = 10000; // 10 segundos de timeout
         
-        socket.setTimeout(5000); // 5 segundos de timeout
+        for (const port of ports) {
+            try {
+                const socket = new net.Socket();
+                
+                const result = await new Promise((portResolve) => {
+                    socket.setTimeout(timeout);
+                    
+                    socket.on('connect', () => {
+                        console.log(`Conexión TCP exitosa a smtp.gmail.com:${port}`);
+                        socket.end();
+                        portResolve(true);
+                    });
+                    
+                    socket.on('timeout', () => {
+                        console.log(`Timeout al intentar conectar a smtp.gmail.com:${port}`);
+                        socket.destroy();
+                        portResolve(false);
+                    });
+                    
+                    socket.on('error', (error) => {
+                        console.log(`Error de conexión TCP en puerto ${port}:`, error.code);
+                        socket.destroy();
+                        portResolve(false);
+                    });
+                    
+                    console.log(`Intentando conexión TCP a smtp.gmail.com:${port}...`);
+                    socket.connect(port, 'smtp.gmail.com');
+                });
+                
+                if (result) {
+                    console.log(`Puerto ${port} disponible para SMTP`);
+                    return resolve(true);
+                }
+            } catch (err) {
+                console.error(`Error probando puerto ${port}:`, err);
+            }
+        }
         
-        socket.on('connect', () => {
-            console.log(`Conexión TCP exitosa a smtp.gmail.com:${port}`);
-            socket.end();
-            resolve(true);
-        });
-        
-        socket.on('timeout', () => {
-            console.error(`Timeout al intentar conectar a smtp.gmail.com:${port}`);
-            socket.destroy();
-            resolve(false);
-        });
-        
-        socket.on('error', (error) => {
-            console.error('Error de conexión TCP:', error);
-            resolve(false);
-        });
-        
-        console.log(`Intentando conexión TCP a smtp.gmail.com:${port}...`);
-        socket.connect(port, 'smtp.gmail.com');
+        console.error('No se pudo conectar a ningún puerto SMTP');
+        resolve(false);
     });
 }
 
@@ -373,23 +392,29 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
   });
   
   // Crear un único transporter para reutilizar
+  // Configurar el transporter con opciones más permisivas
   const transporter = nodemailer.createTransport({
-    service: process.env.MAIL_SERVICE,
-    port: parseInt(process.env.MAIL_PORT || '465'),
-    secure: process.env.MAIL_SECURE === 'true',
+    host: 'smtp.gmail.com',
+    port: 587,  // Cambiamos a puerto 587 para TLS
+    secure: false, // false para TLS - como true para 465
+    requireTLS: true, // Forzar uso de TLS
     auth: {
       user: process.env.MAIL_USER,
       pass: process.env.MAIL_PASS
     },
     tls: {
-      rejectUnauthorized: false
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.2',
+      ciphers: 'HIGH:MEDIUM:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA'
     },
-    // Configuración de timeouts más largos
-    connectionTimeout: 30000,    // 30 segundos
-    greetingTimeout: 30000,     // 30 segundos
-    socketTimeout: 30000,        // 30 segundos
-    debug: true,                // Habilitar logs de debug
-    logger: true                // Habilitar logging detallado
+    connectionTimeout: 60000,    // 60 segundos
+    greetingTimeout: 60000,     // 60 segundos
+    socketTimeout: 60000,        // 60 segundos
+    debug: true,
+    logger: true,
+    pool: true,                 // Usar pool de conexiones
+    maxConnections: 3,          // Máximo número de conexiones simultáneas
+    maxMessages: 10             // Máximo número de mensajes por conexión
   });
 
   const maxRetries = 3;
