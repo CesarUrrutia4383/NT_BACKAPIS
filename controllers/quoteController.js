@@ -8,18 +8,25 @@ let cotizaciones = [];
 function createTransporter() {
     return nodemailer.createTransport({
         host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
+        port: 587,
+        secure: false, // false para TLS - como true requiere SSL
         auth: {
             user: process.env.MAIL_USER,
-            pass: process.env.MAIL_PASS // Usar contraseña de aplicación de Gmail
+            pass: process.env.MAIL_PASS
         },
+        connectionTimeout: 10000, // 10 segundos
+        greetingTimeout: 10000,
+        socketTimeout: 30000, // 30 segundos
         tls: {
-            // Configuración específica para Gmail
             minVersion: 'TLSv1.2',
             ciphers: 'HIGH:MEDIUM:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA',
             rejectUnauthorized: true
         },
+        pool: true, // Usar pool de conexiones
+        maxConnections: 3,
+        maxMessages: 100,
+        rateDelta: 1000,
+        rateLimit: 3,
         debug: true,
         logger: true
     });
