@@ -8,9 +8,29 @@ const sendQuote = async (req, res) => {
   const { carrito, nombre, telefono, servicio, descripcion } = req.body;
   console.log('Iniciando sendQuote con datos:', { carrito: carrito ? carrito.length : 0, nombre, telefono, servicio });
 
-  if (!carrito || !nombre || !telefono) {
-    console.log('Datos incompletos en sendQuote');
-    return res.status(400).json({ message: 'Datos incompletos' });
+  // Validación más detallada de los datos recibidos
+  if (!carrito || !Array.isArray(carrito) || carrito.length === 0) {
+    console.log('Carrito inválido o vacío en sendQuote');
+    return res.status(400).json({ 
+      message: 'El carrito está vacío o es inválido',
+      success: false 
+    });
+  }
+
+  if (!nombre || typeof nombre !== 'string' || nombre.trim().length === 0) {
+    console.log('Nombre inválido en sendQuote');
+    return res.status(400).json({ 
+      message: 'El nombre es requerido',
+      success: false 
+    });
+  }
+
+  if (!telefono || typeof telefono !== 'string' || telefono.trim().length === 0) {
+    console.log('Teléfono inválido en sendQuote');
+    return res.status(400).json({ 
+      message: 'El teléfono es requerido',
+      success: false 
+    });
   }
 
   // Definir correos por servicio para que la cotizacion sea enviada segun corresponda
@@ -51,8 +71,13 @@ const sendQuote = async (req, res) => {
     // Si la petición incluye ?descargar=1, solo devolver el PDF
     if (req.query.descargar === '1') {
       console.log('Descargando PDF en lugar de enviar correo');
+      // Configurar headers CORS específicos para la descarga del PDF
+      res.setHeader('Access-Control-Allow-Origin', 'https://nt-catalog.vercel.app');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="NT_Cotizacion_${nombre}.pdf"`);
+      res.setHeader('Content-Disposition', `attachment; filename="NT_Cotizacion_${nombre}.pdf"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
       return res.end(pdfBuffer);
     }
 
@@ -102,12 +127,44 @@ const sendQuote = async (req, res) => {
 
 function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, servicio, descripcion }) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 40 });
+    console.log('Iniciando generación de PDF con datos:', {
+      productos: carrito.length,
+      cliente: nombreCliente,
+      servicio
+    });
+
+    const doc = new PDFDocument({ 
+      margin: 40,
+      size: 'A4',
+      info: {
+        Title: `Cotización para ${nombreCliente}`,
+        Author: 'Neumatics Tool',
+        Subject: `Cotización de ${servicio}`,
+        Keywords: 'cotización, neumatics tool',
+        CreationDate: new Date()
+      }
+    });
+
     const buffers = [];
-    doc.on('data', buffers.push.bind(buffers));
+    
+    doc.on('data', chunk => {
+      buffers.push(chunk);
+    });
+
     doc.on('end', () => {
-      const pdfData = Buffer.concat(buffers);
-      resolve(pdfData);
+      try {
+        const pdfData = Buffer.concat(buffers);
+        console.log('PDF generado exitosamente, tamaño:', pdfData.length, 'bytes');
+        resolve(pdfData);
+      } catch (error) {
+        console.error('Error al concatenar buffers del PDF:', error);
+        reject(error);
+      }
+    });
+
+    doc.on('error', (error) => {
+      console.error('Error durante la generación del PDF:', error);
+      reject(error);
     });
 
     // Cabecera
