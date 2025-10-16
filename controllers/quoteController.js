@@ -18,20 +18,21 @@ async function testSMTPConnection() {
         return false;
     }
 
-    // 2. Probar conexión TCP al puerto SMTP
+    // 2. Probar conexión TCP al puerto SMTP configurado
     return new Promise((resolve) => {
         const socket = new net.Socket();
+        const port = parseInt(process.env.MAIL_PORT || '465');
         
         socket.setTimeout(5000); // 5 segundos de timeout
         
         socket.on('connect', () => {
-            console.log('Conexión TCP exitosa a smtp.gmail.com:587');
+            console.log(`Conexión TCP exitosa a smtp.gmail.com:${port}`);
             socket.end();
             resolve(true);
         });
         
         socket.on('timeout', () => {
-            console.error('Timeout al intentar conectar a smtp.gmail.com:587');
+            console.error(`Timeout al intentar conectar a smtp.gmail.com:${port}`);
             socket.destroy();
             resolve(false);
         });
@@ -41,8 +42,8 @@ async function testSMTPConnection() {
             resolve(false);
         });
         
-        console.log('Intentando conexión TCP a smtp.gmail.com:587...');
-        socket.connect(587, 'smtp.gmail.com');
+        console.log(`Intentando conexión TCP a smtp.gmail.com:${port}...`);
+        socket.connect(port, 'smtp.gmail.com');
     });
 }
 
@@ -373,16 +374,15 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
   
   // Crear un único transporter para reutilizar
   const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // upgrade later with STARTTLS
+    service: process.env.MAIL_SERVICE,
+    port: parseInt(process.env.MAIL_PORT || '465'),
+    secure: process.env.MAIL_SECURE === 'true',
     auth: {
       user: process.env.MAIL_USER,
       pass: process.env.MAIL_PASS
     },
     tls: {
-      rejectUnauthorized: false,
-      ciphers: 'SSLv3'
+      rejectUnauthorized: false
     },
     // Configuración de timeouts más largos
     connectionTimeout: 30000,    // 30 segundos
