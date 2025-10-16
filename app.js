@@ -1,47 +1,66 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const productRoutes = require('./routes/products');
-const cartRoutes = require('./routes/cart');
-const quoteRoutes = require('./routes/quote');
 const dotenv = require('dotenv');
-const { pool } = require('./config/db');
 
+// Cargar variables de entorno
 dotenv.config();
+
+// Importar rutas solo si la conexión a la base de datos es exitosa
+let productRoutes, cartRoutes, quoteRoutes;
+try {
+    const { pool } = require('./config/db');
+    productRoutes = require('./routes/products');
+    cartRoutes = require('./routes/cart');
+    quoteRoutes = require('./routes/quote');
+} catch (error) {
+    console.error('Error importing routes or database:', error);
+}
 
 const app = express();
 
-// Configuración de CORS más permisiva
-app.use(cors({
-  origin: [
-    'https://nt-catalog.vercel.app',
-    'http://localhost:5173',
-    'http://localhost:5174'
-  ],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Accept', 'Origin', 'Access-Control-Allow-Origin'],
-  credentials: false,
-  optionsSuccessStatus: 200
-}));
-
-// Habilitar pre-flight para todas las rutas
-app.options('*', cors());
-
+// Configuración básica
 app.use(bodyParser.json({ limit: '10mb' }));
+app.use(cors());
 
-// Middleware para headers CORS adicionales
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://nt-catalog.vercel.app');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Accept, Origin');
-  res.header('Access-Control-Allow-Credentials', 'false');
-  
-  // Handle OPTIONS method
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
+// Ruta de prueba y diagnóstico
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'API is running',
+    env: {
+      NODE_ENV: process.env.NODE_ENV,
+      DATABASE_URL: process.env.DATABASE_URL ? 'Configured' : 'Not configured',
+      MAIL_SERVICE: process.env.MAIL_SERVICE ? 'Configured' : 'Not configured'
+    }
+  });
 });
+
+// Rutas protegidas con try-catch
+if (productRoutes && cartRoutes && quoteRoutes) {
+  app.use('/productos', productRoutes);
+  app.use('/cart', cartRoutes);
+  app.use('/quote', quoteRoutes);
+}
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Error occurred:', err);
+  res.status(500).json({ 
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
+});
+
+// Solo iniciar el servidor en desarrollo
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+module.exports = app;
 
 // Ruta de prueba para verificar que el servidor está funcionando
 app.get('/api/health', (req, res) => {
