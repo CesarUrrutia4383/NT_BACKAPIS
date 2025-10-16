@@ -1,98 +1,133 @@
 const express = require('express');
+console.log('Express loaded successfully');
+
 const cors = require('cors');
+console.log('CORS loaded successfully');
+
 const bodyParser = require('body-parser');
+console.log('Body Parser loaded successfully');
+
 const dotenv = require('dotenv');
+console.log('Dotenv loaded successfully');
+
+const errorHandler = require('./middleware/errorHandler');
+console.log('Error handler loaded successfully');
 
 // Cargar variables de entorno
 dotenv.config();
+console.log('Environment variables loaded. NODE_ENV:', process.env.NODE_ENV);
 
 // Importar rutas solo si la conexión a la base de datos es exitosa
 let productRoutes, cartRoutes, quoteRoutes;
+
+console.log('Attempting to connect to database and load routes...');
 try {
-    const { pool } = require('./config/db');
+    const { pool, isConnected } = require('./config/db');
+    console.log('Database module loaded, connection status:', isConnected());
+    
     productRoutes = require('./routes/products');
+    console.log('Product routes loaded successfully');
+    
     cartRoutes = require('./routes/cart');
+    console.log('Cart routes loaded successfully');
+    
     quoteRoutes = require('./routes/quote');
+    console.log('Quote routes loaded successfully');
 } catch (error) {
-    console.error('Error importing routes or database:', error);
+    console.error('Error during initialization:', error);
+    console.error('Stack trace:', error.stack);
 }
 
+console.log('Creating Express application...');
 const app = express();
 
 // Configuración básica
+console.log('Setting up basic middleware...');
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(cors());
 
 // Ruta de prueba y diagnóstico
+console.log('Setting up diagnostic routes...');
 app.get('/', (req, res) => {
-  res.json({ 
+  console.log('Handling root route request');
+  const diagnostics = {
     message: 'API is running',
-    env: {
-      NODE_ENV: process.env.NODE_ENV,
-      DATABASE_URL: process.env.DATABASE_URL ? 'Configured' : 'Not configured',
-      MAIL_SERVICE: process.env.MAIL_SERVICE ? 'Configured' : 'Not configured'
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    config: {
+      node_version: process.version,
+      dependencies_loaded: {
+        express: !!express,
+        cors: !!cors,
+        bodyParser: !!bodyParser,
+        dotenv: !!dotenv
+      },
+      routes_loaded: {
+        products: !!productRoutes,
+        cart: !!cartRoutes,
+        quote: !!quoteRoutes
+      },
+      env_vars_set: {
+        NODE_ENV: !!process.env.NODE_ENV,
+        DB_HOST: !!process.env.DB_HOST,
+        DB_USER_INV: !!process.env.DB_USER_INV,
+        DB_NAME: !!process.env.DB_NAME,
+        MAIL_SERVICE: !!process.env.MAIL_SERVICE
+      }
     }
-  });
+  };
+  console.log('Diagnostic data:', diagnostics);
+  res.json(diagnostics);
 });
 
-// Rutas protegidas con try-catch
+// Rutas de API con manejo de errores mejorado
+console.log('Setting up API routes...');
 if (productRoutes && cartRoutes && quoteRoutes) {
-  app.use('/productos', productRoutes);
-  app.use('/cart', cartRoutes);
-  app.use('/quote', quoteRoutes);
+  console.log('Loading route modules...');
+  app.use('/productos', (req, res, next) => {
+    console.log('Products route accessed:', req.path);
+    return productRoutes(req, res, next);
+  });
+  
+  app.use('/cart', (req, res, next) => {
+    console.log('Cart route accessed:', req.path);
+    return cartRoutes(req, res, next);
+  });
+  
+  app.use('/quote', (req, res, next) => {
+    console.log('Quote route accessed:', req.path);
+    return quoteRoutes(req, res, next);
+  });
+} else {
+  console.warn('Some route modules failed to load!');
 }
 
-// Error handler
+// Error handler mejorado
 app.use((err, req, res, next) => {
-  console.error('Error occurred:', err);
+  console.error('Error details:', {
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method
+  });
+  
   res.status(500).json({ 
     error: 'Internal Server Error',
     message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
+    timestamp: new Date().toISOString(),
+    path: req.path,
+    requestId: req.headers['x-request-id'],
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
   });
 });
 
-// Solo iniciar el servidor en desarrollo
+// Manejo de desarrollo local
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 4000;
   app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Development server running on port ${PORT}`);
   });
 }
 
-module.exports = app;
-
-// Ruta de prueba para verificar que el servidor está funcionando
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Server is running' });
-});
-
-// Ruta de prueba
-app.get('/', (req, res) => {
-  res.json({ message: 'API is running' });
-});
-
-// Rutas de productos
-app.use('/productos', productRoutes);
-app.use('/cart', cartRoutes);
-app.use('/quote', quoteRoutes);
-
-// Error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ 
-    error: 'Something broke!',
-    message: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-  });
-});
-
-// Para desarrollo local
-if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 4000;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
-
+console.log('Express application setup completed');
 module.exports = app;
