@@ -15,9 +15,9 @@ function createTransporter() {
             pass: process.env.MAIL_PASS // Usar contraseña de aplicación de Gmail
         },
         tls: {
-            // Forzar TLS
+            // Configuración específica para Gmail
             minVersion: 'TLSv1.2',
-            ciphers: tls.getCiphers().join(':'),
+            ciphers: 'HIGH:MEDIUM:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA',
             rejectUnauthorized: true
         },
         debug: true,
