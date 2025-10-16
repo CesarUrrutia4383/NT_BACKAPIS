@@ -359,7 +359,7 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
       
       // Usar Resend para enviar el correo
       const { data, error } = await resend.emails.send({
-        from: 'Neumatics Tool <no-reply@neumaticstool.com>',
+        from: 'onboarding@resend.dev',
         to: [to],
         subject: subject,
         text: text,
@@ -406,129 +406,6 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
       }
     }
   }
-
-  let lastError = null;
-  
-  // Verificar la conexión SMTP antes de intentar enviar
-  try {
-    await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Timeout al verificar conexión SMTP'));
-      }, 10000);
-
-      transporter.verify((error) => {
-        clearTimeout(timeout);
-        if (error) {
-          console.error('Error al verificar conexión SMTP:', error);
-          reject(error);
-        } else {
-          console.log('Servidor SMTP listo para enviar mensajes');
-          resolve();
-        }
-      });
-    });
-  } catch (verifyError) {
-    console.error('Error en la verificación SMTP:', verifyError);
-    throw new Error(`Error de conexión SMTP: ${verifyError.message}`);
-  }
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`Intento ${attempt} de ${maxRetries} para enviar correo a: ${to}`);
-      console.log(`Enviando correo a ${to} con asunto: ${subject}`);
-      
-      // Verificar la conexión primero
-      try {
-        await transporter.verify();
-        console.log('Conexión SMTP verificada exitosamente');
-      } catch (verifyError) {
-        console.error('Error en verificación SMTP:', verifyError);
-        throw verifyError;
-      }
-
-      const fecha = new Date().toLocaleDateString('es-MX');
-      const mailOptions = {
-        from: `"Neumatics Tool" <${process.env.MAIL_USER}>`,
-        to,
-        subject,
-        text,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #FF8F1C;">Nueva Cotización - Neumatics Tool</h2>
-            <div style="border-left: 4px solid #FF8F1C; padding-left: 15px; margin: 20px 0;">
-              <p><strong>Cliente:</strong> ${text.split('\n')[2].replace('Cliente: ', '')}</p>
-              <p><strong>Teléfono:</strong> ${text.split('\n')[3].replace('Teléfono: ', '')}</p>
-              <p><strong>Servicio:</strong> ${text.split('\n')[4].replace('Servicio: ', '')}</p>
-              <p><strong>Fecha:</strong> ${fecha}</p>
-            </div>
-            <p>Se adjunta PDF con los detalles de la cotización.</p>
-            <br>
-            <p style="color: #666; font-size: 12px; margin-top: 30px;">
-              Este es un correo automático, por favor no responder.<br>
-              Neumatics Tool © ${new Date().getFullYear()}
-            </p>
-          </div>
-        `,
-        attachments: [{
-          filename: `NT_Cotizacion_${fecha.replace(/\//g, '-')}.pdf`,
-          content: pdfBuffer,
-          contentType: 'application/pdf',
-          encoding: 'base64'
-        }],
-        priority: 'high'
-      };
-
-      const info = await transporter.sendMail(mailOptions);
-      console.log(`Correo enviado exitosamente a ${to} en el intento ${attempt}`);
-      return info;
-    } catch (error) {
-      lastError = error;
-      console.error(`Error en intento ${attempt}/${maxRetries}:`, {
-        message: error.message,
-        code: error.code,
-        response: error.response?.body || error.response
-      });
-      
-      // Si no es el último intento, esperar antes del siguiente
-      if (attempt < maxRetries) {
-        const waitTime = Math.min(attempt * 5000, 15000); // Máximo 15 segundos de espera
-        console.log(`Esperando ${waitTime/1000} segundos antes del siguiente intento...`);
-        
-        // Si es un error de timeout, recrear el transporter
-        if (lastError.code === 'ETIMEDOUT') {
-          console.log('Recreando transporter debido a timeout...');
-          transporter.close();
-          transporter = nodemailer.createTransport({
-            host: 'smtp.gmail.com',
-            port: 465,
-            secure: true,
-            auth: {
-              user: process.env.MAIL_USER,
-              pass: process.env.MAIL_PASS
-            },
-            tls: {
-              rejectUnauthorized: false
-            },
-            connectionTimeout: 15000,
-            greetingTimeout: 10000,
-            socketTimeout: 15000,
-            debug: true
-          });
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-      }
-    }
-  }
-  
-  // Si llegamos aquí, es porque todos los intentos fallaron
-  console.error('Detalles del último error:', {
-    message: lastError.message,
-    code: lastError.code,
-    response: lastError.response?.body || lastError.response
-  });
-  
-  throw new Error(`Error al enviar el correo después de ${maxRetries} intentos: ${lastError.message}`);
 }
 
 module.exports = { sendQuote };
