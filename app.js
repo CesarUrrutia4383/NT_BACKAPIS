@@ -48,10 +48,15 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
+// Ruta de prueba
+app.get('/', (req, res) => {
+  res.json({ message: 'API is running' });
+});
+
 // Rutas de productos
-app.use('/api/productos', productRoutes);
-app.use('/api/cart', cartRoutes);
-app.use('/api/quote', quoteRoutes);
+app.use('/productos', productRoutes);
+app.use('/cart', cartRoutes);
+app.use('/quote', quoteRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
@@ -71,5 +76,4 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// Exportar la app para Vercel
 module.exports = app;
