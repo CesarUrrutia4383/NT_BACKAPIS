@@ -82,24 +82,27 @@ app.get('/', (req, res) => {
 
 // Rutas de API con manejo de errores mejorado
 console.log('Setting up API routes...');
-if (productRoutes && cartRoutes && quoteRoutes) {
+try {
   console.log('Loading route modules...');
-  app.use('/productos', (req, res, next) => {
-    console.log('Products route accessed:', req.path);
-    return productRoutes(req, res, next);
-  });
   
-  app.use('/cart', (req, res, next) => {
-    console.log('Cart route accessed:', req.path);
-    return cartRoutes(req, res, next);
+  // Middleware para loggear todas las peticiones
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    next();
   });
+
+  // Prefijo /api para todas las rutas
+  app.use('/api/productos', productRoutes);
+  console.log('Products routes mounted at /api/productos');
   
-  app.use('/quote', (req, res, next) => {
-    console.log('Quote route accessed:', req.path);
-    return quoteRoutes(req, res, next);
-  });
-} else {
-  console.warn('Some route modules failed to load!');
+  app.use('/api/cart', cartRoutes);
+  console.log('Cart routes mounted at /api/cart');
+  
+  app.use('/api/quote', quoteRoutes);
+  console.log('Quote routes mounted at /api/quote');
+
+} catch (error) {
+  console.error('Error setting up routes:', error);
 }
 
 // Error handler mejorado
