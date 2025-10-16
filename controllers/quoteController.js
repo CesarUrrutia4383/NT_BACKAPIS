@@ -7,26 +7,18 @@ let cotizaciones = [];
 // Función para crear el transporter con la configuración correcta
 function createTransporter() {
     return nodemailer.createTransport({
+        service: 'gmail',
         host: 'smtp.gmail.com',
-        port: 587,
-        secure: false, // false para TLS - como true requiere SSL
+        port: 465,
+        secure: true,
         auth: {
             user: process.env.MAIL_USER,
             pass: process.env.MAIL_PASS
         },
-        connectionTimeout: 10000, // 10 segundos
-        greetingTimeout: 10000,
-        socketTimeout: 30000, // 30 segundos
         tls: {
-            minVersion: 'TLSv1.2',
-            ciphers: 'HIGH:MEDIUM:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA',
-            rejectUnauthorized: true
+            rejectUnauthorized: false,
+            servername: 'smtp.gmail.com'
         },
-        pool: true, // Usar pool de conexiones
-        maxConnections: 3,
-        maxMessages: 100,
-        rateDelta: 1000,
-        rateLimit: 3,
         debug: true,
         logger: true
     });
