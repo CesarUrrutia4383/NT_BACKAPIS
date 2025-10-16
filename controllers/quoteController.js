@@ -52,7 +52,7 @@ const sendQuote = async (req, res) => {
     if (req.query.descargar === '1') {
       console.log('Descargando PDF en lugar de enviar correo');
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', 'inline; filename="NT_Cotizacion.pdf"+"nombre"');
+      res.setHeader('Content-Disposition', `inline; filename="NT_Cotizacion_${nombre}.pdf"`);
       return res.end(pdfBuffer);
     }
 
