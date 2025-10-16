@@ -1,32 +1,41 @@
 const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
-const { Resend } = require('resend');
-const resend = new Resend(process.env.RESEND_API_KEY);
+const tls = require('tls');
 
 let cotizaciones = [];
 
-// Función para probar la conectividad de Resend
+// Función para crear el transporter con la configuración correcta
+function createTransporter() {
+    return nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        auth: {
+            user: process.env.MAIL_USER,
+            pass: process.env.MAIL_PASS // Usar contraseña de aplicación de Gmail
+        },
+        tls: {
+            // Forzar TLS
+            minVersion: 'TLSv1.2',
+            ciphers: tls.getCiphers().join(':'),
+            rejectUnauthorized: true
+        },
+        debug: true,
+        logger: true
+    });
+}
+
+// Función para probar la conectividad SMTP
 async function testEmailConnectivity() {
     console.log('Verificando conectividad del servicio de correo...');
     
     try {
-        // Intentar hacer una petición simple a Resend
-        const response = await fetch('https://api.resend.com/v1/emails', {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
-            }
-        });
-
-        if (response.ok) {
-            console.log('Conectividad con servicio de correo verificada');
-            return true;
-        } else {
-            console.error('Error conectando con servicio de correo:', response.statusText);
-            return false;
-        }
+        const transporter = createTransporter();
+        await transporter.verify();
+        console.log('Conexión SMTP verificada exitosamente');
+        return true;
     } catch (error) {
-        console.error('Error verificando conectividad:', error);
+        console.error('Error verificando conectividad SMTP:', error);
         return false;
     }
 }
@@ -352,24 +361,27 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
   
   const fecha = new Date().toLocaleDateString('es-MX');
   const maxRetries = 3;
+  let transporter;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Intento ${attempt} de ${maxRetries} para enviar correo a: ${to}`);
       
-      // Usar Resend para enviar el correo
-      const { data, error } = await resend.emails.send({
-        from: 'onboarding@resend.dev',
-        to: [to],
+      // Crear un nuevo transporter en cada intento
+      transporter = createTransporter();
+      
+      const mailOptions = {
+        from: `"Neumatics Tool" <${process.env.MAIL_USER}>`,
+        to: to,
         subject: subject,
         text: text,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #FF8F1C;">Nueva Cotización - Neumatics Tool</h2>
             <div style="border-left: 4px solid #FF8F1C; padding-left: 15px; margin: 20px 0;">
-              <p><strong>Cliente:</strong> ${text.split('\n')[2].replace('Cliente: ', '')}</p>
-              <p><strong>Teléfono:</strong> ${text.split('\n')[3].replace('Teléfono: ', '')}</p>
-              <p><strong>Servicio:</strong> ${text.split('\n')[4].replace('Servicio: ', '')}</p>
+              <p><strong>Cliente:</strong> ${text.split('\n')[2] ? text.split('\n')[2].replace('Cliente: ', '') : ''}</p>
+              <p><strong>Teléfono:</strong> ${text.split('\n')[3] ? text.split('\n')[3].replace('Teléfono: ', '') : ''}</p>
+              <p><strong>Servicio:</strong> ${text.split('\n')[4] ? text.split('\n')[4].replace('Servicio: ', '') : ''}</p>
               <p><strong>Fecha:</strong> ${fecha}</p>
             </div>
             <p>Se adjunta PDF con los detalles de la cotización.</p>
@@ -382,16 +394,16 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
         `,
         attachments: [{
           filename: `NT_Cotizacion_${fecha.replace(/\//g, '-')}.pdf`,
-          content: pdfBuffer.toString('base64')
+          content: pdfBuffer,
+          contentType: 'application/pdf'
         }]
-      });
+      };
 
-      if (error) {
-        throw new Error(error.message);
-      }
+      // Enviar el correo y esperar la respuesta
+      const info = await transporter.sendMail(mailOptions);
 
-      console.log(`Correo enviado exitosamente a ${to} en el intento ${attempt}`);
-      return data;
+      console.log(`Correo enviado exitosamente a ${to} en el intento ${attempt}`, info);
+      return info;
     } catch (error) {
       console.error(`Error en intento ${attempt}/${maxRetries}:`, {
         message: error.message
