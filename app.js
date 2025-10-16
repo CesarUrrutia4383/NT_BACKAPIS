@@ -10,7 +10,6 @@ const { pool } = require('./config/db');
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 4000;
 
 // Configuración de CORS más permisiva
 app.use(cors({
@@ -44,11 +43,33 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rutas de productos
-app.use('/routes/productos', productRoutes);
-app.use('/routes/cart', cartRoutes);
-app.use('/routes/quote', quoteRoutes);
-
-app.listen(PORT, () => {
-  
+// Ruta de prueba para verificar que el servidor está funcionando
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Server is running' });
 });
+
+// Rutas de productos
+app.use('/api/productos', productRoutes);
+app.use('/api/cart', cartRoutes);
+app.use('/api/quote', quoteRoutes);
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ 
+    error: 'Something broke!',
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
+});
+
+// Para desarrollo local
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+// Exportar la app para Vercel
+module.exports = app;
