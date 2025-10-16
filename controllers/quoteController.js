@@ -1,10 +1,68 @@
 const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
-// fs y path eliminados porque ya no se usan
+const net = require('net');
+const dns = require('dns');
 
 let cotizaciones = [];
 
+// Función para probar la conectividad SMTP
+async function testSMTPConnection() {
+    console.log('Iniciando pruebas de conectividad SMTP...');
+    
+    // 1. Resolver DNS de Gmail
+    try {
+        const addresses = await dns.promises.resolve('smtp.gmail.com');
+        console.log('Resolución DNS de smtp.gmail.com exitosa:', addresses);
+    } catch (error) {
+        console.error('Error en resolución DNS:', error);
+        return false;
+    }
+
+    // 2. Probar conexión TCP al puerto SMTP
+    return new Promise((resolve) => {
+        const socket = new net.Socket();
+        
+        socket.setTimeout(5000); // 5 segundos de timeout
+        
+        socket.on('connect', () => {
+            console.log('Conexión TCP exitosa a smtp.gmail.com:587');
+            socket.end();
+            resolve(true);
+        });
+        
+        socket.on('timeout', () => {
+            console.error('Timeout al intentar conectar a smtp.gmail.com:587');
+            socket.destroy();
+            resolve(false);
+        });
+        
+        socket.on('error', (error) => {
+            console.error('Error de conexión TCP:', error);
+            resolve(false);
+        });
+        
+        console.log('Intentando conexión TCP a smtp.gmail.com:587...');
+        socket.connect(587, 'smtp.gmail.com');
+    });
+}
+
 const sendQuote = async (req, res) => {
+  console.log('Iniciando pruebas de conectividad...');
+  
+  // Ejecutar prueba de conectividad SMTP
+  const smtpConnectivity = await testSMTPConnection();
+  console.log('Resultado de prueba SMTP:', smtpConnectivity ? 'EXITOSA' : 'FALLIDA');
+  
+  // Mostrar información del ambiente
+  console.log('Variables de entorno:', {
+    MAIL_SERVICE: process.env.MAIL_SERVICE,
+    MAIL_PORT: process.env.MAIL_PORT,
+    MAIL_SECURE: process.env.MAIL_SECURE,
+    MAIL_USER: process.env.MAIL_USER ? '***configurado***' : 'NO CONFIGURADO',
+    MAIL_PASS: process.env.MAIL_PASS ? '***configurado***' : 'NO CONFIGURADO',
+    NODE_ENV: process.env.NODE_ENV
+  });
+
   const { carrito, nombre, telefono, servicio, descripcion } = req.body;
   console.log('Iniciando sendQuote con datos:', { carrito: carrito ? carrito.length : 0, nombre, telefono, servicio });
 
@@ -306,44 +364,107 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
 
 async function enviarCorreo({ to, subject, text, pdfBuffer }) {
   console.log(`Preparando envío de correo a: ${to}`);
+  console.log('Configuración de correo:', {
+    host: process.env.MAIL_SERVICE,
+    port: process.env.MAIL_PORT,
+    secure: process.env.MAIL_SECURE === 'true',
+    user: process.env.MAIL_USER?.substring(0, 5) + '...' // Solo mostrar parte del correo por seguridad
+  });
   
   // Crear un único transporter para reutilizar
   const transporter = nodemailer.createTransport({
-    service: process.env.MAIL_SERVICE,
-    port: process.env.MAIL_PORT || 465,
-    secure: process.env.MAIL_SECURE === 'true',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // upgrade later with STARTTLS
     auth: {
       user: process.env.MAIL_USER,
       pass: process.env.MAIL_PASS
     },
     tls: {
-      rejectUnauthorized: false
-    }
+      rejectUnauthorized: false,
+      ciphers: 'SSLv3'
+    },
+    // Configuración de timeouts más largos
+    connectionTimeout: 30000,    // 30 segundos
+    greetingTimeout: 30000,     // 30 segundos
+    socketTimeout: 30000,        // 30 segundos
+    debug: true,                // Habilitar logs de debug
+    logger: true                // Habilitar logging detallado
   });
 
   const maxRetries = 3;
   let lastError = null;
   
+  // Verificar la conexión SMTP antes de intentar enviar
+  try {
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Timeout al verificar conexión SMTP'));
+      }, 10000);
+
+      transporter.verify((error) => {
+        clearTimeout(timeout);
+        if (error) {
+          console.error('Error al verificar conexión SMTP:', error);
+          reject(error);
+        } else {
+          console.log('Servidor SMTP listo para enviar mensajes');
+          resolve();
+        }
+      });
+    });
+  } catch (verifyError) {
+    console.error('Error en la verificación SMTP:', verifyError);
+    throw new Error(`Error de conexión SMTP: ${verifyError.message}`);
+  }
+  
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Intento ${attempt} de ${maxRetries} para enviar correo a: ${to}`);
-
       console.log(`Enviando correo a ${to} con asunto: ${subject}`);
       
-      const info = await transporter.sendMail({
-        from: {
-          name: 'Neumatics Tool',
-          address: process.env.MAIL_USER
-        },
+      // Verificar la conexión primero
+      try {
+        await transporter.verify();
+        console.log('Conexión SMTP verificada exitosamente');
+      } catch (verifyError) {
+        console.error('Error en verificación SMTP:', verifyError);
+        throw verifyError;
+      }
+
+      const fecha = new Date().toLocaleDateString('es-MX');
+      const mailOptions = {
+        from: `"Neumatics Tool" <${process.env.MAIL_USER}>`,
         to,
         subject,
         text,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #FF8F1C;">Nueva Cotización - Neumatics Tool</h2>
+            <div style="border-left: 4px solid #FF8F1C; padding-left: 15px; margin: 20px 0;">
+              <p><strong>Cliente:</strong> ${text.split('\n')[2].replace('Cliente: ', '')}</p>
+              <p><strong>Teléfono:</strong> ${text.split('\n')[3].replace('Teléfono: ', '')}</p>
+              <p><strong>Servicio:</strong> ${text.split('\n')[4].replace('Servicio: ', '')}</p>
+              <p><strong>Fecha:</strong> ${fecha}</p>
+            </div>
+            <p>Se adjunta PDF con los detalles de la cotización.</p>
+            <br>
+            <p style="color: #666; font-size: 12px; margin-top: 30px;">
+              Este es un correo automático, por favor no responder.<br>
+              Neumatics Tool © ${new Date().getFullYear()}
+            </p>
+          </div>
+        `,
         attachments: [{
-          filename: 'Cotizacion.pdf',
+          filename: `NT_Cotizacion_${fecha.replace(/\//g, '-')}.pdf`,
           content: pdfBuffer,
-          contentType: 'application/pdf'
-        }]
-      });
+          contentType: 'application/pdf',
+          encoding: 'base64'
+        }],
+        priority: 'high'
+      };
+
+      const info = await transporter.sendMail(mailOptions);
       console.log(`Correo enviado exitosamente a ${to} en el intento ${attempt}`);
       return info;
     } catch (error) {
@@ -356,8 +477,31 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
       
       // Si no es el último intento, esperar antes del siguiente
       if (attempt < maxRetries) {
-        const waitTime = attempt * 3000; // Incrementar tiempo de espera con cada intento
+        const waitTime = Math.min(attempt * 5000, 15000); // Máximo 15 segundos de espera
         console.log(`Esperando ${waitTime/1000} segundos antes del siguiente intento...`);
+        
+        // Si es un error de timeout, recrear el transporter
+        if (lastError.code === 'ETIMEDOUT') {
+          console.log('Recreando transporter debido a timeout...');
+          transporter.close();
+          transporter = nodemailer.createTransport({
+            host: 'smtp.gmail.com',
+            port: 465,
+            secure: true,
+            auth: {
+              user: process.env.MAIL_USER,
+              pass: process.env.MAIL_PASS
+            },
+            tls: {
+              rejectUnauthorized: false
+            },
+            connectionTimeout: 15000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000,
+            debug: true
+          });
+        }
+        
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
