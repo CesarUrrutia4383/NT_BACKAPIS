@@ -87,7 +87,7 @@ const sendQuote = async (req, res) => {
   // Definir correos por servicio para que la cotizacion sea enviada segun corresponda
   const correosPorServicio = {
     'venta': ['cesar_urrutia_dev4383@proton.me'],
-    'mantenimiento': ['cesar_urrutia_dev4383@proton.me','cesar_urrutia_dev4383@proton.me'],
+    'servicio de mantenimiento': ['cesar_urrutia_dev4383@proton.me','cesar_urrutia_dev4383@proton.me'],
     'renta': ['cesar_urrutia_dev4383@proton.me']
     /*'venta': ['arturo.lopez@neumaticstool.com'],
     'mantenimiento': ['ventasnt@neumaticstool.com','serviciosnt@neumaticstool.com'],
