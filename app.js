@@ -12,16 +12,26 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Configuración de CORS más permisiva
+// Configuración de CORS: validar origen con una whitelist y permitir preflight
+const whitelist = [
+  'https://www.neumaticstool.com',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'https://nt-catalog.vercel.app'
+];
+
 app.use(cors({
-  origin: [
-    'https://www.neumaticstool.com',
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'https://www.neumaticstool.com/',
-  ],
+  origin: function (origin, callback) {
+    // allow requests with no origin (like curl, postman or server-to-server)
+    if (!origin) return callback(null, true);
+    if (whitelist.indexOf(origin) !== -1) {
+      return callback(null, true);
+    }
+    // Explicitly block other origins
+    return callback(new Error('CORS policy: Origin not allowed'), false);
+  },
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Accept', 'Origin', 'Access-Control-Allow-Origin'],
+  allowedHeaders: ['Content-Type', 'Accept', 'Origin', 'Authorization'],
   credentials: false,
   optionsSuccessStatus: 200
 }));
@@ -30,20 +40,6 @@ app.use(cors({
 app.options('*', cors());
 
 app.use(bodyParser.json({ limit: '10mb' }));
-
-// Middleware para headers CORS adicionales
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://nt-catalog.vercel.app');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Accept, Origin');
-  res.header('Access-Control-Allow-Credentials', 'false');
-  
-  // Handle OPTIONS method
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
 
 // Rutas de productos
 app.use('/routes/productos', productRoutes);
