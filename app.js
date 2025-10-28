@@ -15,11 +15,10 @@ const PORT = process.env.PORT || 4000;
 // Configuración de CORS más permisiva
 app.use(cors({
   origin: [
-    'https://nt-catalog.vercel.app',
+    'https://www.neumaticstool.com',
     'http://localhost:5173',
     'http://localhost:5174',
     'https://www.neumaticstool.com/',
-    'https://www.neumaticstool.com'
   ],
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Accept', 'Origin', 'Access-Control-Allow-Origin'],
