@@ -1,60 +1,13 @@
-const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
-const tls = require('tls');
 
 let cotizaciones = [];
 
-// Función para crear el transporter con la configuración correcta
-function createTransporter() {
-    return nodemailer.createTransport({
-        service: 'gmail',
-        host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
-        auth: {
-            user: process.env.MAIL_USER,
-            pass: process.env.MAIL_PASS
-        },
-        tls: {
-            rejectUnauthorized: false,
-            servername: 'smtp.gmail.com'
-        },
-        debug: true,
-        logger: true
-    });
-}
-
-// Función para probar la conectividad SMTP
-async function testEmailConnectivity() {
-    console.log('Verificando conectividad del servicio de correo...');
-    
-    try {
-        const transporter = createTransporter();
-        await transporter.verify();
-        console.log('Conexión SMTP verificada exitosamente');
-        return true;
-    } catch (error) {
-        console.error('Error verificando conectividad SMTP:', error);
-        return false;
-    }
-}
+// El controlador ahora delega el envío de correos al frontend.
+// Esta versión genera el PDF y lo devuelve como descarga (si ?descargar=1)
+// o como base64 en JSON para que el frontend pueda enviar correos con el adjunto.
 
 const sendQuote = async (req, res) => {
-  console.log('Iniciando pruebas de conectividad...');
-  
-  // Verificar conectividad del servicio de correo
-  const emailConnectivity = await testEmailConnectivity();
-  console.log('Resultado de prueba de conectividad:', emailConnectivity ? 'EXITOSA' : 'FALLIDA');
-  
-  // Mostrar información del ambiente
-  console.log('Variables de entorno:', {
-    MAIL_SERVICE: process.env.MAIL_SERVICE,
-    MAIL_PORT: process.env.MAIL_PORT,
-    MAIL_SECURE: process.env.MAIL_SECURE,
-    MAIL_USER: process.env.MAIL_USER ? '***configurado***' : 'NO CONFIGURADO',
-    MAIL_PASS: process.env.MAIL_PASS ? '***configurado***' : 'NO CONFIGURADO',
-    NODE_ENV: process.env.NODE_ENV
-  });
+  // Nota: el backend ya no envía correos. Solo genera el PDF y lo devuelve.
 
   const { carrito, nombre, telefono, servicio, descripcion } = req.body;
   console.log('Iniciando sendQuote con datos:', { carrito: carrito ? carrito.length : 0, nombre, telefono, servicio });
@@ -119,11 +72,11 @@ const sendQuote = async (req, res) => {
     const pdfBuffer = await generarPDFCotizacionBuffer({ carrito, nombreCliente: nombre, telefonoCliente: telefono, servicio, descripcion });
     console.log('PDF generado exitosamente, tamaño:', pdfBuffer.length);
 
-    // Si la petición incluye ?descargar=1, solo devolver el PDF
+    // Si la petición incluye ?descargar=1, devolver el PDF como attachment (download)
     if (req.query.descargar === '1') {
       console.log('Descargando PDF en lugar de enviar correo');
-      // Configurar headers CORS específicos para la descarga del PDF
-      res.setHeader('Access-Control-Allow-Origin', 'https://nt-catalog.vercel.app');
+      // Mantener compatibilidad con la descarga directa
+      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
       res.setHeader('Content-Type', 'application/pdf');
@@ -132,43 +85,16 @@ const sendQuote = async (req, res) => {
       return res.end(pdfBuffer);
     }
 
-    // Enviar correo a todos los correos destino
-    console.log('Iniciando envío de correos...');
-    let errores = [];
-    let exitos = [];
-
-    for (const correo of correosDestino) {
-      console.log(`Enviando correo a: ${correo}`);
-      try {
-        await enviarCorreo({
-          to: correo,
-          subject: `Neumatics Tool || Cotización de ${servicio || 'Servicio'} Entrante`,
-          text: `Cotización Entrante\n\nCliente: ${nombre}\nTeléfono: ${telefono}\nServicio: ${servicio}\n\nSe adjunta PDF con los detalles.`,
-          pdfBuffer
-        });
-        console.log(`Correo enviado exitosamente a: ${correo}`);
-        exitos.push(correo);
-      } catch (emailErr) {
-        console.error(`Error enviando correo a ${correo}:`, emailErr);
-        errores.push({ correo, error: emailErr.message });
-      }
-    }
-
-    console.log('Envío de correos completado');
-    
-    if (errores.length > 0 && exitos.length === 0) {
-      return res.status(500).json({
-        message: 'Error al enviar todos los correos',
-        errores,
-        success: false
-      });
-    }
-
-    res.json({
-      message: exitos.length === correosDestino.length ? 'Cotización enviada correctamente' : 'Cotización enviada parcialmente',
+    // Para uso desde el frontend: devolver el PDF en base64 y los correos destino
+    const pdfBase64 = pdfBuffer.toString('base64');
+    return res.json({
+      message: 'PDF generado, el frontend debe gestionar el envío de correos',
       success: true,
-      errores: errores.length > 0 ? errores : undefined,
-      exitosos: exitos
+      pdfBase64,
+      nombre,
+      telefono,
+      servicio,
+      correosDestino
     });
   } catch (err) {
     console.error('Error general en sendQuote:', err);
@@ -356,67 +282,8 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
 }
 
 async function enviarCorreo({ to, subject, text, pdfBuffer }) {
-  console.log(`Preparando envío de correo a: ${to}`);
-  
-  const fecha = new Date().toLocaleDateString('es-MX');
-  const maxRetries = 3;
-  let transporter;
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`Intento ${attempt} de ${maxRetries} para enviar correo a: ${to}`);
-      
-      // Crear un nuevo transporter en cada intento
-      transporter = createTransporter();
-      
-      const mailOptions = {
-        from: `"Neumatics Tool" <${process.env.MAIL_USER}>`,
-        to: to,
-        subject: subject,
-        text: text,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #FF8F1C;">Nueva Cotización - Neumatics Tool</h2>
-            <div style="border-left: 4px solid #FF8F1C; padding-left: 15px; margin: 20px 0;">
-              <p><strong>Cliente:</strong> ${text.split('\n')[2] ? text.split('\n')[2].replace('Cliente: ', '') : ''}</p>
-              <p><strong>Teléfono:</strong> ${text.split('\n')[3] ? text.split('\n')[3].replace('Teléfono: ', '') : ''}</p>
-              <p><strong>Servicio:</strong> ${text.split('\n')[4] ? text.split('\n')[4].replace('Servicio: ', '') : ''}</p>
-              <p><strong>Fecha:</strong> ${fecha}</p>
-            </div>
-            <p>Se adjunta PDF con los detalles de la cotización.</p>
-            <br>
-            <p style="color: #666; font-size: 12px; margin-top: 30px;">
-              Este es un correo automático, por favor no responder.<br>
-              Neumatics Tool © ${new Date().getFullYear()}
-            </p>
-          </div>
-        `,
-        attachments: [{
-          filename: `NT_Cotizacion_${fecha.replace(/\//g, '-')}.pdf`,
-          content: pdfBuffer,
-          contentType: 'application/pdf'
-        }]
-      };
-
-      // Enviar el correo y esperar la respuesta
-      const info = await transporter.sendMail(mailOptions);
-
-      console.log(`Correo enviado exitosamente a ${to} en el intento ${attempt}`, info);
-      return info;
-    } catch (error) {
-      console.error(`Error en intento ${attempt}/${maxRetries}:`, {
-        message: error.message
-      });
-      
-      if (attempt < maxRetries) {
-        const waitTime = Math.min(attempt * 5000, 15000);
-        console.log(`Esperando ${waitTime/1000} segundos antes del siguiente intento...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-      } else {
-        throw new Error(`Error al enviar el correo después de ${maxRetries} intentos: ${error.message}`);
-      }
-    }
-  }
+  // El envío de correos fue movido al frontend. Esta función ya no está disponible en el backend.
+  throw new Error('enviarCorreo ya no está soportado en el backend. Genere el PDF y envíe el correo desde el frontend.');
 }
 
 module.exports = { sendQuote };
