@@ -52,6 +52,16 @@ app.use('/routes/quote', quoteRoutes);
 
 // Intentar iniciar el servidor con manejo de errores
 const startServer = (port) => {
+  const server = app.listen(port, () => {
+    console.log(`Servidor corriendo en puerto ${port}`);
+  }).on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log(`Puerto ${port} en uso, intentando con puerto ${port + 1}...`);
+      startServer(port + 1);
+    } else {
+      console.error('Error al iniciar servidor:', err);
+    }
+  });
 };
 
 startServer(PORT);
