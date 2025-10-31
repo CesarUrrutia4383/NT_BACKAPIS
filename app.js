@@ -50,6 +50,8 @@ app.use('/routes/productos', productRoutes);
 app.use('/routes/cart', cartRoutes);
 app.use('/routes/quote', quoteRoutes);
 
-app.listen(PORT, () => {
-  
-});
+// Intentar iniciar el servidor con manejo de errores
+const startServer = (port) => {
+};
+
+startServer(PORT);

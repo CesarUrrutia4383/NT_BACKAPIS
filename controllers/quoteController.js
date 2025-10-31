@@ -307,8 +307,58 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
 }
 
 async function enviarCorreo({ to, subject, text, pdfBuffer }) {
-  // El envío de correos fue movido al frontend. Esta función ya no está disponible en el backend.
-  throw new Error('enviarCorreo ya no está soportado en el backend. Genere el PDF y envíe el correo desde el frontend.');
+  // Legacy placeholder — no-op. Use sendEmailServer endpoint instead for server-side sending.
+  throw new Error('enviarCorreo ya no está soportado en el backend. Use POST /routes/quote/send');
 }
 
-module.exports = { sendQuote };
+/**
+ * Envia por correo la cotización (PDF en base64) desde el servidor usando nodemailer.
+ * Espera en el body: { pdfBase64, nombre, telefono, servicio, correosDestino }
+ */
+async function sendEmailServer(req, res) {
+  const { pdfBase64, nombre, telefono, servicio, correosDestino } = req.body;
+  try {
+    if (!pdfBase64) return res.status(400).json({ success: false, message: 'pdfBase64 es requerido' });
+
+    // Determinar destinatarios
+    let destinatarios = correosDestino;
+    if (!Array.isArray(destinatarios) || destinatarios.length === 0) {
+      // fallback al env TO_MAIL_USER si existe
+      destinatarios = process.env.TO_MAIL_USER ? [process.env.TO_MAIL_USER] : [];
+    }
+    if (destinatarios.length === 0) return res.status(400).json({ success: false, message: 'No hay correos destino configurados' });
+
+    // Cargar nodemailer dinámicamente (evita crash en entornos sin dependencia instalada si no se usa)
+    const nodemailer = require('nodemailer');
+
+    // Construir transporter usando credenciales del .env (MAIL_USER, MAIL_PASS)
+    const mailUser = process.env.MAIL_USER;
+    const mailPass = process.env.MAIL_PASS;
+    if (!mailUser || !mailPass) return res.status(500).json({ success: false, message: 'Credenciales de correo no configuradas en el servidor' });
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: mailUser, pass: mailPass }
+    });
+
+    const buffer = Buffer.from(pdfBase64, 'base64');
+    const mailOptions = {
+      from: mailUser,
+      to: destinatarios.join(','),
+      subject: `Cotización - ${nombre || 'Cliente'}`,
+      text: `Se adjunta la cotización solicitada.\nCliente: ${nombre || ''}\nTeléfono: ${telefono || ''}\nServicio: ${servicio || ''}`,
+      attachments: [
+        { filename: `NT_Cotizacion_${(nombre || 'cotizacion').replace(/\s+/g, '_')}.pdf`, content: buffer, contentType: 'application/pdf' }
+      ]
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Correo enviado desde servidor, info:', info);
+    return res.json({ success: true, info });
+  } catch (err) {
+    console.error('Error en sendEmailServer:', err);
+    return res.status(500).json({ success: false, message: 'Error enviando correo desde servidor', error: err.message });
+  }
+}
+
+module.exports = { sendQuote, sendEmailServer };
