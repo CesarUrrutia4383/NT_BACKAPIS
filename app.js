@@ -31,7 +31,11 @@ app.use(cors({
     return callback(new Error('CORS policy: Origin not allowed'), false);
   },
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Accept', 'Origin', 'Authorization'],
+  // Permitimos algunos headers comunes. NOTA: 'Access-Control-Allow-Origin' es
+  // un header de respuesta que no debería ser enviado por el cliente, pero
+  // lo incluimos aquí para evitar fallos de preflight si algún cliente lo
+  // envía por error. Lo correcto es eliminar ese header en el cliente.
+  allowedHeaders: ['Content-Type', 'Accept', 'Origin', 'Authorization', 'Access-Control-Allow-Origin'],
   credentials: false,
   optionsSuccessStatus: 200
 }));

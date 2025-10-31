@@ -92,8 +92,11 @@ const sendQuote = async (req, res) => {
         // Fallback a dominio principal para peticiones desde navegadores
         res.setHeader('Access-Control-Allow-Origin', 'https://www.neumaticstool.com');
       }
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  // Incluir Access-Control-Allow-Origin aquí solo para cubrir preflight si
+  // el cliente lo envía por error. Idealmente el cliente NO debe enviar
+  // este header; el servidor lo establece en la respuesta.
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Access-Control-Allow-Origin');
       // No exponemos cookies ni credenciales en este endpoint
       res.setHeader('Access-Control-Allow-Credentials', 'false');
 
