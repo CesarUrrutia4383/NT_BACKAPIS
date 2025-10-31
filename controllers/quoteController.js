@@ -75,10 +75,32 @@ const sendQuote = async (req, res) => {
     // Si la petición incluye ?descargar=1, devolver el PDF como attachment (download)
     if (req.query.descargar === '1') {
       console.log('Descargando PDF en lugar de enviar correo');
-      // Mantener compatibilidad con la descarga directa
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      // Compatibilidad con descarga directa y seguridad CORS/iframe.
+      // Permitimos explícitamente el dominio principal y algunos orígenes
+      // de desarrollo. Evitamos usar '*' para Access-Control-Allow-Origin
+      // cuando el contenido puede contener datos sensibles.
+      const allowedOrigins = [
+        'https://www.neumaticstool.com',
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'https://nt-catalog.vercel.app'
+      ];
+      const origin = req.headers.origin;
+      if (origin && allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      } else {
+        // Fallback a dominio principal para peticiones desde navegadores
+        res.setHeader('Access-Control-Allow-Origin', 'https://www.neumaticstool.com');
+      }
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+      // No exponemos cookies ni credenciales en este endpoint
+      res.setHeader('Access-Control-Allow-Credentials', 'false');
+
+      // Permitir que este recurso (PDF) sea embebido en iframes desde el dominio
+      // autorizado. Si quieres permitir más orígenes, añádelos a allowedOrigins
+      res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://www.neumaticstool.com");
+
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="NT_Cotizacion_${nombre}.pdf"`);
       res.setHeader('Content-Length', pdfBuffer.length);
