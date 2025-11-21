@@ -2,6 +2,13 @@ const PDFDocument = require('pdfkit');
 
 let cotizaciones = [];
 
+// Mapeo de correos por tipo de servicio (compartido por los handlers)
+const correosPorServicio = {
+  'venta': ['cesar_urrutia_dev4383@proton.me'],
+  'servicio de mantenimiento': ['cesar_urrutia_dev4383@proton.me','cesar_urrutia_dev4383@proton.me'],
+  'renta': ['cesar_urrutia_dev4383@proton.me']
+};
+
 // El controlador ahora delega el envío de correos al frontend.
 // Esta versión genera el PDF y lo devuelve como descarga (si ?descargar=1)
 // o como base64 en JSON para que el frontend pueda enviar correos con el adjunto.
@@ -36,16 +43,6 @@ const sendQuote = async (req, res) => {
       success: false 
     });
   }
-
-  // Definir correos por servicio para que la cotizacion sea enviada segun corresponda
-  const correosPorServicio = {
-    'venta': ['cesar_urrutia_dev4383@proton.me'],
-    'servicio de mantenimiento': ['cesar_urrutia_dev4383@proton.me','cesar_urrutia_dev4383@proton.me'],
-    'renta': ['cesar_urrutia_dev4383@proton.me']
-    /*'venta': ['arturo.lopez@neumaticstool.com'],
-    'mantenimiento': ['ventasnt@neumaticstool.com','serviciosnt@neumaticstool.com'],
-    'renta': ['divisionmineria@neumaticstool.com']*/
-  };
 
   // Obtener correos del servicio, o default si no coincide
   const correosServicio = correosPorServicio[servicio] || ['cesar_urrutia_dev4383@proton.me'];
@@ -316,32 +313,67 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
  * Espera en el body: { pdfBase64, nombre, telefono, servicio, correosDestino }
  */
 async function sendEmailServer(req, res) {
-  const { pdfBase64, nombre, telefono, servicio, correosDestino } = req.body;
+  const { pdfBase64, nombre, telefono, servicio, correosDestino, carrito, descripcion } = req.body;
   try {
-    if (!pdfBase64) return res.status(400).json({ success: false, message: 'pdfBase64 es requerido' });
+    let buffer;
 
-    // Determinar destinatarios
-    let destinatarios = correosDestino;
-    if (!Array.isArray(destinatarios) || destinatarios.length === 0) {
-      // fallback al env TO_MAIL_USER si existe
-      destinatarios = process.env.TO_MAIL_USER ? [process.env.TO_MAIL_USER] : [];
+    if (pdfBase64 && typeof pdfBase64 === 'string') {
+      buffer = Buffer.from(pdfBase64, 'base64');
+    } else if (carrito && Array.isArray(carrito) && carrito.length > 0) {
+      // Generar PDF desde el carrito recibido
+      buffer = await generarPDFCotizacionBuffer({ carrito, nombreCliente: nombre, telefonoCliente: telefono, servicio, descripcion });
+    } else {
+      return res.status(400).json({ success: false, message: 'Se requiere pdfBase64 o carrito para generar el PDF' });
     }
-    if (destinatarios.length === 0) return res.status(400).json({ success: false, message: 'No hay correos destino configurados' });
 
-    // Cargar nodemailer dinámicamente (evita crash en entornos sin dependencia instalada si no se usa)
+    // Determinar destinatarios: usar correosDestino si viene, sino mapear por servicio, sino fallback a env
+    let destinatarios = [];
+    if (Array.isArray(correosDestino) && correosDestino.length > 0) destinatarios = correosDestino;
+    else if (typeof correosDestino === 'string' && correosDestino.trim() !== '') destinatarios = [correosDestino.trim()];
+    else if (servicio && correosPorServicio[servicio]) destinatarios = correosPorServicio[servicio];
+    else if (process.env.TO_MAIL_USER) destinatarios = [process.env.TO_MAIL_USER];
+
+    if (!Array.isArray(destinatarios) || destinatarios.length === 0) {
+      return res.status(400).json({ success: false, message: 'No hay destinatarios configurados' });
+    }
+
+    // ---------- FORZAR DESTINATARIO PARA PRUEBAS ----------
+    // Durante pruebas queremos que TODOS los correos vayan a la cuenta de
+    // pruebas: cesar_urrutia_dev4383@proton.me. Para desactivar esto más tarde
+    // y volver al comportamiento normal, eliminar o comentar la siguiente
+    // línea y administrar destinatarios usando `correosDestino`, `servicio` o
+    // la variable de entorno `TO_MAIL_USER`.
+    destinatarios = ['cesar_urrutia_dev4383@proton.me'];
+    console.log('INFO: Envío forzado para pruebas. Destinatarios sobrescritos a:', destinatarios);
+    // -------------------------------------------------------
+
     const nodemailer = require('nodemailer');
 
-    // Construir transporter usando credenciales del .env (MAIL_USER, MAIL_PASS)
+    // Soporte para configurar transporte vía env vars: preferir MAIL_SERVICE (e.g., 'gmail')
+    // o parámetros SMTP explícitos: MAIL_HOST, MAIL_PORT, MAIL_SECURE
     const mailUser = process.env.MAIL_USER;
     const mailPass = process.env.MAIL_PASS;
-    if (!mailUser || !mailPass) return res.status(500).json({ success: false, message: 'Credenciales de correo no configuradas en el servidor' });
 
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: mailUser, pass: mailPass }
-    });
+    if (!mailUser || !mailPass) {
+      return res.status(500).json({ success: false, message: 'Credenciales de correo no configuradas en el servidor' });
+    }
 
-    const buffer = Buffer.from(pdfBase64, 'base64');
+    let transporterConfig = {};
+    if (process.env.MAIL_SERVICE) {
+      transporterConfig = { service: process.env.MAIL_SERVICE, auth: { user: mailUser, pass: mailPass } };
+    } else if (process.env.MAIL_HOST) {
+      transporterConfig = {
+        host: process.env.MAIL_HOST,
+        port: process.env.MAIL_PORT ? parseInt(process.env.MAIL_PORT, 10) : 587,
+        secure: process.env.MAIL_SECURE === 'true',
+        auth: { user: mailUser, pass: mailPass }
+      };
+    } else {
+      transporterConfig = { service: 'gmail', auth: { user: mailUser, pass: mailPass } };
+    }
+
+    const transporter = nodemailer.createTransport(transporterConfig);
+
     const mailOptions = {
       from: mailUser,
       to: destinatarios.join(','),
