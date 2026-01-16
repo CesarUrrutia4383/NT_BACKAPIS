@@ -5,7 +5,7 @@ let cotizaciones = [];
 // Mapeo de correos por tipo de servicio (compartido por los handlers)
 const correosPorServicio = {
   'venta': ['cesar_urrutia_dev4383@proton.me'],
-  'servicio de mantenimiento': ['cesar_urrutia_dev4383@proton.me','cesar_urrutia_dev4383@proton.me'],
+  'servicio de mantenimiento': ['cesar_urrutia_dev4383@proton.me', 'cesar_urrutia_dev4383@proton.me'],
   'renta': ['cesar_urrutia_dev4383@proton.me']
 };
 
@@ -22,25 +22,25 @@ const sendQuote = async (req, res) => {
   // Validación más detallada de los datos recibidos
   if (!carrito || !Array.isArray(carrito) || carrito.length === 0) {
     console.log('Carrito inválido o vacío en sendQuote');
-    return res.status(400).json({ 
+    return res.status(400).json({
       message: 'El carrito está vacío o es inválido',
-      success: false 
+      success: false
     });
   }
 
   if (!nombre || typeof nombre !== 'string' || nombre.trim().length === 0) {
     console.log('Nombre inválido en sendQuote');
-    return res.status(400).json({ 
+    return res.status(400).json({
       message: 'El nombre es requerido',
-      success: false 
+      success: false
     });
   }
 
   if (!telefono || typeof telefono !== 'string' || telefono.trim().length === 0) {
     console.log('Teléfono inválido en sendQuote');
-    return res.status(400).json({ 
+    return res.status(400).json({
       message: 'El teléfono es requerido',
-      success: false 
+      success: false
     });
   }
 
@@ -89,11 +89,11 @@ const sendQuote = async (req, res) => {
         // Fallback a dominio principal para peticiones desde navegadores
         res.setHeader('Access-Control-Allow-Origin', 'https://www.neumaticstool.com');
       }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  // Incluir Access-Control-Allow-Origin aquí solo para cubrir preflight si
-  // el cliente lo envía por error. Idealmente el cliente NO debe enviar
-  // este header; el servidor lo establece en la respuesta.
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Access-Control-Allow-Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      // Incluir Access-Control-Allow-Origin aquí solo para cubrir preflight si
+      // el cliente lo envía por error. Idealmente el cliente NO debe enviar
+      // este header; el servidor lo establece en la respuesta.
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Access-Control-Allow-Origin');
       // No exponemos cookies ni credenciales en este endpoint
       res.setHeader('Access-Control-Allow-Credentials', 'false');
 
@@ -132,7 +132,7 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
       servicio
     });
 
-    const doc = new PDFDocument({ 
+    const doc = new PDFDocument({
       margin: 40,
       size: 'A4',
       info: {
@@ -145,7 +145,7 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
     });
 
     const buffers = [];
-    
+
     doc.on('data', chunk => {
       buffers.push(chunk);
     });
@@ -309,7 +309,7 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
 }
 
 /**
- * Envia por correo la cotización (PDF en base64) desde el servidor usando nodemailer.
+ * Envia por correo la cotización (PDF en base64) desde el servidor usando Brevo.
  * Espera en el body: { pdfBase64, nombre, telefono, servicio, correosDestino }
  */
 async function sendEmailServer(req, res) {
@@ -347,48 +347,77 @@ async function sendEmailServer(req, res) {
     console.log('INFO: Envío forzado para pruebas. Destinatarios sobrescritos a:', destinatarios);
     // -------------------------------------------------------
 
-    const nodemailer = require('nodemailer');
+    // Configuración de Brevo
+    const brevo = require('@getbrevo/brevo');
+    const apiInstance = new brevo.TransactionalEmailsApi();
 
-    // Soporte para configurar transporte vía env vars: preferir MAIL_SERVICE (e.g., 'gmail')
-    // o parámetros SMTP explícitos: MAIL_HOST, MAIL_PORT, MAIL_SECURE
-    const mailUser = process.env.MAIL_USER;
-    const mailPass = process.env.MAIL_PASS;
+    // Configurar API Key
+    const apiKey = apiInstance.authentications['apiKey'];
+    apiKey.apiKey = process.env.BREVO_API_KEY;
 
-    if (!mailUser || !mailPass) {
-      return res.status(500).json({ success: false, message: 'Credenciales de correo no configuradas en el servidor' });
+    if (!process.env.BREVO_API_KEY) {
+      return res.status(500).json({ success: false, message: 'BREVO_API_KEY no configurada en el servidor' });
     }
 
-    let transporterConfig = {};
-    if (process.env.MAIL_SERVICE) {
-      transporterConfig = { service: process.env.MAIL_SERVICE, auth: { user: mailUser, pass: mailPass } };
-    } else if (process.env.MAIL_HOST) {
-      transporterConfig = {
-        host: process.env.MAIL_HOST,
-        port: process.env.MAIL_PORT ? parseInt(process.env.MAIL_PORT, 10) : 587,
-        secure: process.env.MAIL_SECURE === 'true',
-        auth: { user: mailUser, pass: mailPass }
-      };
-    } else {
-      transporterConfig = { service: 'gmail', auth: { user: mailUser, pass: mailPass } };
-    }
+    // Preparar el archivo adjunto en base64
+    const pdfBase64Content = buffer.toString('base64');
+    const fileName = `NT_Cotizacion_${(nombre || 'cotizacion').replace(/\s+/g, '_')}.pdf`;
 
-    const transporter = nodemailer.createTransport(transporterConfig);
+    // Preparar el email
+    const sendSmtpEmail = new brevo.SendSmtpEmail();
 
-    const mailOptions = {
-      from: mailUser,
-      to: destinatarios.join(','),
-      subject: `Cotización - ${nombre || 'Cliente'}`,
-      text: `Se adjunta la cotización solicitada.\nCliente: ${nombre || ''}\nTeléfono: ${telefono || ''}\nServicio: ${servicio || ''}`,
-      attachments: [
-        { filename: `NT_Cotizacion_${(nombre || 'cotizacion').replace(/\s+/g, '_')}.pdf`, content: buffer, contentType: 'application/pdf' }
-      ]
+    sendSmtpEmail.sender = {
+      name: process.env.BREVO_SENDER_NAME || 'Neumatics Tool',
+      email: process.env.BREVO_SENDER_EMAIL || 'contacto@neumaticstool.com'
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Correo enviado desde servidor, info:', info);
-    return res.json({ success: true, info });
+    sendSmtpEmail.to = destinatarios.map(email => ({ email }));
+
+    sendSmtpEmail.subject = `Cotización - ${nombre || 'Cliente'}`;
+
+    sendSmtpEmail.htmlContent = `
+      <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+          <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #FF8F1C;">Nueva Cotización - Neumatics Tool</h2>
+            <p>Se ha generado una nueva cotización con los siguientes datos:</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Cliente:</strong></td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd;">${nombre || 'No especificado'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Teléfono:</strong></td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd;">${telefono || 'No especificado'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Servicio:</strong></td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd;">${servicio || 'No especificado'}</td>
+              </tr>
+            </table>
+            <p>El PDF con los detalles de la cotización se encuentra adjunto a este correo.</p>
+            <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+            <p style="font-size: 12px; color: #666;">
+              <strong>Neumatics Tool</strong><br>
+              Blvd. Luis Donaldo Colosio #1007, 34217, Durango, México<br>
+              Tel: 618 818 21 82 | contacto@neumaticstool.com
+            </p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    sendSmtpEmail.attachment = [{
+      content: pdfBase64Content,
+      name: fileName
+    }];
+
+    // Enviar el email
+    const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    console.log('Correo enviado desde servidor con Brevo, info:', data);
+    return res.json({ success: true, info: data });
   } catch (err) {
-    console.error('Error en sendEmailServer:', err);
+    console.error('Error en sendEmailServer con Brevo:', err);
     return res.status(500).json({ success: false, message: 'Error enviando correo desde servidor', error: err.message });
   }
 }

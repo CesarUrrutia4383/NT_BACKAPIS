@@ -21,6 +21,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@getbrevo/brevo": "^3.0.1",
     "aos": "^2.3.4",
     "axios": "^1.10.0",
     "bcrypt": "^5.1.1",
