@@ -22,7 +22,7 @@ let cotizaciones = [];
  * 3. Para agregar nuevos tipos de servicio, simplemente añade una nueva línea:
  *    Ejemplo: 'instalacion': ['instalacion@neumaticstool.com']
  * 
- * IMPORTANTE: Revisa también la línea 346 donde hay un override forzado para pruebas.
+ * 25. IMPORTANTE: Revisa también la línea 346 donde hay un override forzado para pruebas.
  */
 const correosPorServicio = {
   'venta': ['arturo.lopez@neumaticstool.com', 'divisionmineria@neumaticstool.com'],
@@ -37,8 +37,8 @@ const correosPorServicio = {
 const sendQuote = async (req, res) => {
   // Nota: el backend ya no envía correos. Solo genera el PDF y lo devuelve.
 
-  const { carrito, nombre, telefono, servicio, descripcion } = req.body;
-  console.log('Iniciando sendQuote con datos:', { carrito: carrito ? carrito.length : 0, nombre, telefono, servicio });
+  const { carrito, nombre, telefono, email, servicio, descripcion } = req.body;
+  console.log('Iniciando sendQuote con datos:', { carrito: carrito ? carrito.length : 0, nombre, telefono, email, servicio });
 
   // Validación más detallada de los datos recibidos
   if (!carrito || !Array.isArray(carrito) || carrito.length === 0) {
@@ -78,16 +78,24 @@ const sendQuote = async (req, res) => {
       correosDestino.push(req.body.destinoCorreo);
     }
   }
+  // Agregar el correo del cliente si existe y no está ya incluido
+  if (email && typeof email === 'string' && email.trim() !== '') {
+    const clientEmail = email.trim();
+    if (!correosDestino.some(dest => dest.toLowerCase() === clientEmail.toLowerCase())) {
+      correosDestino.push(clientEmail);
+    }
+  }
+
   console.log('Correos destino finales:', correosDestino);
 
   // Guardar cotización en memoria
-  const cotizacion = { carrito, nombre, telefono, fecha: new Date(), servicio, correosDestino };
+  const cotizacion = { carrito, nombre, telefono, email, fecha: new Date(), servicio, correosDestino };
   cotizaciones.push(cotizacion);
 
   // Generar PDF en memoria
   try {
     console.log('Generando PDF...');
-    const pdfBuffer = await generarPDFCotizacionBuffer({ carrito, nombreCliente: nombre, telefonoCliente: telefono, servicio, descripcion });
+    const pdfBuffer = await generarPDFCotizacionBuffer({ carrito, nombreCliente: nombre, telefonoCliente: telefono, emailCliente: email, servicio, descripcion });
     console.log('PDF generado exitosamente, tamaño:', pdfBuffer.length);
 
     // Si la petición incluye ?descargar=1, devolver el PDF como attachment (download)
@@ -136,6 +144,7 @@ const sendQuote = async (req, res) => {
       pdfBase64,
       nombre,
       telefono,
+      email,
       servicio,
       correosDestino
     });
@@ -145,11 +154,12 @@ const sendQuote = async (req, res) => {
   }
 };
 
-function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, servicio, descripcion }) {
+function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, emailCliente, servicio, descripcion }) {
   return new Promise((resolve, reject) => {
     console.log('Iniciando generación de PDF con datos:', {
       productos: carrito.length,
       cliente: nombreCliente,
+      email: emailCliente,
       servicio
     });
 
@@ -199,6 +209,9 @@ function generarPDFCotizacionBuffer({ carrito, nombreCliente, telefonoCliente, s
     doc.text(`Fecha: ${new Date().toLocaleDateString()}`);
     doc.text(`Cliente: ${nombreCliente}`);
     doc.text(`Teléfono: ${telefonoCliente}`);
+    if (emailCliente) {
+      doc.text(`Email: ${emailCliente}`);
+    }
     doc.moveDown(1.5);
 
     // Tabla de productos dinámica
@@ -334,7 +347,7 @@ async function enviarCorreo({ to, subject, text, pdfBuffer }) {
  * Espera en el body: { pdfBase64, nombre, telefono, servicio, correosDestino }
  */
 async function sendEmailServer(req, res) {
-  const { pdfBase64, nombre, telefono, servicio, correosDestino, carrito, descripcion } = req.body;
+  const { pdfBase64, nombre, telefono, email, servicio, correosDestino, carrito, descripcion } = req.body;
   try {
     let buffer;
 
@@ -342,7 +355,7 @@ async function sendEmailServer(req, res) {
       buffer = Buffer.from(pdfBase64, 'base64');
     } else if (carrito && Array.isArray(carrito) && carrito.length > 0) {
       // Generar PDF desde el carrito recibido
-      buffer = await generarPDFCotizacionBuffer({ carrito, nombreCliente: nombre, telefonoCliente: telefono, servicio, descripcion });
+      buffer = await generarPDFCotizacionBuffer({ carrito, nombreCliente: nombre, telefonoCliente: telefono, emailCliente: email, servicio, descripcion });
     } else {
       return res.status(400).json({ success: false, message: 'Se requiere pdfBase64 o carrito para generar el PDF' });
     }
@@ -353,6 +366,16 @@ async function sendEmailServer(req, res) {
     else if (typeof correosDestino === 'string' && correosDestino.trim() !== '') destinatarios = [correosDestino.trim()];
     else if (servicio && correosPorServicio[servicio]) destinatarios = correosPorServicio[servicio];
     else if (process.env.TO_MAIL_USER) destinatarios = [process.env.TO_MAIL_USER];
+
+    // Asegurarse de que el email del cliente esté en los destinatarios si se proporciona en el body (redundancia por seguridad)
+    /*
+    if (email && typeof email === 'string' && email.trim() !== '') {
+      const clientEmail = email.trim();
+      if (!destinatarios.some(d => d.toLowerCase() === clientEmail.toLowerCase())) {
+        destinatarios.push(clientEmail);
+      }
+    }
+    */
 
     if (!Array.isArray(destinatarios) || destinatarios.length === 0) {
       return res.status(400).json({ success: false, message: 'No hay destinatarios configurados' });
@@ -379,8 +402,8 @@ async function sendEmailServer(req, res) {
     //    antes de desplegar a producción
     // 
     // ========================================================================
-    destinatarios = ['cesar_urrutia_dev4383@proton.me']; // ⚠️ COMENTAR ESTA LÍNEA PARA PRODUCCIÓN
-    console.log('⚠️  MODO PRUEBAS: Todos los correos van a:', destinatarios);
+    // destinatarios = ['cesar_urrutia_dev4383@proton.me']; // ⚠️ COMENTAR ESTA LÍNEA PARA PRODUCCIÓN
+    //console.log('📨 Enviando correos a los siguientes destinatarios:', destinatarios);
     // ========================================================================
 
     // Configuración de Brevo
@@ -425,6 +448,10 @@ async function sendEmailServer(req, res) {
               <tr>
                 <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Teléfono:</strong></td>
                 <td style="padding: 8px; border-bottom: 1px solid #ddd;">${telefono || 'No especificado'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Email:</strong></td>
+                <td style="padding: 8px; border-bottom: 1px solid #ddd;">${email || 'No especificado'}</td>
               </tr>
               <tr>
                 <td style="padding: 8px; border-bottom: 1px solid #ddd;"><strong>Servicio:</strong></td>
