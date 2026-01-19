@@ -2,11 +2,32 @@ const PDFDocument = require('pdfkit');
 
 let cotizaciones = [];
 
-// Mapeo de correos por tipo de servicio (compartido por los handlers)
+/**
+ * ========================================
+ * CONFIGURACIÓN DE CORREOS ELECTRÓNICOS
+ * ========================================
+ * 
+ * Este objeto mapea cada tipo de servicio a una lista de correos destinatarios.
+ * 
+ * INSTRUCCIONES PARA CONFIGURAR CORREOS:
+ * 
+ * 1. Modifica los arrays de correos según el tipo de servicio:
+ *    - 'venta': Correos que recibirán cotizaciones de venta
+ *    - 'servicio de mantenimiento': Correos para solicitudes de mantenimiento
+ *    - 'renta': Correos para solicitudes de renta
+ * 
+ * 2. Puedes agregar múltiples correos en cada array:
+ *    Ejemplo: 'venta': ['ventas@neumaticstool.com', 'gerente@neumaticstool.com']
+ * 
+ * 3. Para agregar nuevos tipos de servicio, simplemente añade una nueva línea:
+ *    Ejemplo: 'instalacion': ['instalacion@neumaticstool.com']
+ * 
+ * IMPORTANTE: Revisa también la línea 346 donde hay un override forzado para pruebas.
+ */
 const correosPorServicio = {
-  'venta': ['cesar_urrutia_dev4383@proton.me'],
-  'servicio de mantenimiento': ['cesar_urrutia_dev4383@proton.me', 'cesar_urrutia_dev4383@proton.me'],
-  'renta': ['cesar_urrutia_dev4383@proton.me']
+  'venta': ['arturo.lopez@neumaticstool.com', 'divisionmineria@neumaticstool.com'],
+  'servicio de mantenimiento': ['divisionmineria@neumaticstool.com', 'ntservicios@neumaticstool.com'],
+  'renta': ['divisionmineria@neumaticstool.com']
 };
 
 // El controlador ahora delega el envío de correos al frontend.
@@ -337,15 +358,30 @@ async function sendEmailServer(req, res) {
       return res.status(400).json({ success: false, message: 'No hay destinatarios configurados' });
     }
 
-    // ---------- FORZAR DESTINATARIO PARA PRUEBAS ----------
-    // Durante pruebas queremos que TODOS los correos vayan a la cuenta de
-    // pruebas: cesar_urrutia_dev4383@proton.me. Para desactivar esto más tarde
-    // y volver al comportamiento normal, eliminar o comentar la siguiente
-    // línea y administrar destinatarios usando `correosDestino`, `servicio` o
-    // la variable de entorno `TO_MAIL_USER`.
-    destinatarios = ['cesar_urrutia_dev4383@proton.me'];
-    console.log('INFO: Envío forzado para pruebas. Destinatarios sobrescritos a:', destinatarios);
-    // -------------------------------------------------------
+    // ========================================================================
+    // ⚠️  OVERRIDE DE DESTINATARIOS PARA PRUEBAS - LEER ANTES DE PRODUCCIÓN ⚠️
+    // ========================================================================
+    // 
+    // ESTA LÍNEA SOBRESCRIBE TODOS LOS DESTINATARIOS Y ENVÍA TODOS LOS CORREOS
+    // A LA CUENTA DE PRUEBAS: cesar_urrutia_dev4383@proton.me
+    // 
+    // 🔧 PARA ACTIVAR EN PRODUCCIÓN:
+    // 
+    // 1. COMENTA O ELIMINA la siguiente línea (línea 346):
+    //    destinatarios = ['cesar_urrutia_dev4383@proton.me'];
+    // 
+    // 2. COMENTA O ELIMINA el console.log de la línea 347
+    // 
+    // 3. Los correos se enviarán según la configuración de 'correosPorServicio'
+    //    definida al inicio de este archivo (líneas 6-24)
+    // 
+    // 4. Verifica que los correos en 'correosPorServicio' sean los correctos
+    //    antes de desplegar a producción
+    // 
+    // ========================================================================
+    destinatarios = ['cesar_urrutia_dev4383@proton.me']; // ⚠️ COMENTAR ESTA LÍNEA PARA PRODUCCIÓN
+    console.log('⚠️  MODO PRUEBAS: Todos los correos van a:', destinatarios);
+    // ========================================================================
 
     // Configuración de Brevo
     const brevo = require('@getbrevo/brevo');
